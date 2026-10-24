@@ -56,7 +56,10 @@ import {
   Eye,
   File,
   Layers,
-  RefreshCw
+  RefreshCw,
+  CreditCard,
+  Copy,
+  Landmark
 } from 'lucide-react';
 
 // =============================================================================
@@ -180,6 +183,19 @@ const MEETING_ROLES = [
   'Assessors'
 ];
 
+// =============================================================================
+// TOP 7 MAJOR CANADIAN FINANCIAL INSTITUTIONS (ONLINE BANKING E-TRANSFERS)
+// =============================================================================
+const CANADIAN_MAJOR_BANKS = [
+  { name: 'RBC Royal Bank', code: 'RBC', url: 'https://www.rbcroyalbank.com', badge: 'bg-blue-600' },
+  { name: 'TD Canada Trust', code: 'TD', url: 'https://www.td.com/ca/en/personal-banking', badge: 'bg-emerald-600' },
+  { name: 'Scotiabank', code: 'Scotia', url: 'https://www.scotiabank.com', badge: 'bg-red-600' },
+  { name: 'BMO Bank of Montreal', code: 'BMO', url: 'https://www.bmo.com/main/personal/banking/online-banking/', badge: 'bg-sky-600' },
+  { name: 'CIBC', code: 'CIBC', url: 'https://www.cibc.com/en/personal-banking.html', badge: 'bg-rose-700' },
+  { name: 'National Bank of Canada', code: 'NBC', url: 'https://www.nbc.ca', badge: 'bg-red-700' },
+  { name: 'Tangerine Bank', code: 'Tangerine', url: 'https://www.tangerine.ca', badge: 'bg-orange-600' },
+];
+
 // Helper: Calculate 365-day expiration and validity status from VSC issue date
 const calculateVscStatus = (issueDateStr) => {
   if (!issueDateStr) {
@@ -244,7 +260,10 @@ export default function App() {
   const [parentActiveTab, setParentActiveTab] = useState('dashboard');
   const [parentActiveChildId, setParentActiveChildId] = useState('s-alex-chen');
   const [isRegisteringProgram, setIsRegisteringProgram] = useState(false);
-  const [newRegChildType, setNewRegChildType] = useState('new'); // 'new' | 'existing'
+  const [enrolmentStep, setEnrolmentStep] = useState('child'); // 'child' | 'payment'
+  const [copiedEmailToast, setCopiedEmailToast] = useState(false);
+  const [settlingPaymentChild, setSettlingPaymentChild] = useState(null);
+
   const [newRegistrationData, setNewRegistrationData] = useState({
     firstName: '',
     lastName: '',
@@ -256,7 +275,41 @@ export default function App() {
     program: 'Youth Leadership Program',
     term: 'Spring 2026',
     batchCode: 'YLP - 1A Spring 2026: 1 Markham',
-    existingStudentId: 's-alex-chen',
+    paymentMethod: 'credit_card', // 'credit_card' | 'etransfer' | 'pay_later'
+    cardName: '',
+    cardNumber: '',
+    cardExp: '',
+    cardCvc: '',
+  });
+
+  // NEW PARENT ONBOARDING & SIGNUP WIZARD STATE
+  const [isNewParentSignUp, setIsNewParentSignUp] = useState(false);
+  const [signUpStep, setSignUpStep] = useState(1); // 1: Parent Profile, 2: Child Details, 3: Program Selection, 4: Payment
+  const [isProcessingPayment, setIsProcessingPayment] = useState(false);
+  const [newParentData, setNewParentData] = useState({
+    parentFirstName: '',
+    parentLastName: '',
+    parentEmail: '',
+    parentPhone: '',
+    parentCity: 'Markham',
+    parentPostalCode: 'L3R 5M9',
+    emergencyContactName: '',
+    emergencyContactPhone: '',
+    childFirstName: '',
+    childLastName: '',
+    childDob: '',
+    childGrade: 8,
+    childAllergies: 'None',
+    childCity: 'Markham',
+    childPostalCode: 'L3R 5M9',
+    program: 'Youth Leadership Program',
+    term: 'Spring 2026',
+    batchCode: 'YLP - 1A Spring 2026: 1 Markham',
+    paymentMethod: 'credit_card', // 'credit_card' | 'etransfer' | 'pay_later'
+    cardholderName: '',
+    cardNumber: '',
+    cardExpiry: '',
+    cardCvc: '',
   });
 
   // Student Sub-Tabs: 'dashboard', 'prep', 'milestones', 'feedback'
@@ -284,11 +337,11 @@ export default function App() {
 
   // Admin Master Records State
   const [masterProgramsList, setMasterProgramsList] = useState([
-    { id: 'p1', code: 'YLP', name: 'Youth Leadership Program', description: 'Flagship public speaking and leadership training for ages 12-18', active: true },
-    { id: 'p2', code: 'YHACKS', name: 'YHacks Series', description: 'Youth hackathons, team innovation and technological pitching', active: true },
-    { id: 'p3', code: 'CENTRE_STAGE', name: 'Centre Stage Showcase', description: 'Annual speech tournament and gala theatrical showcase', active: true },
-    { id: 'p4', code: 'YJOBS', name: 'YJobs Career Hub', description: 'Coaching, resumes, interview simulations, and job placement', active: true },
-    { id: 'p5', code: 'YAI', name: 'YAi Artificial Intelligence', description: 'Applied AI ethics, prompt mastery, and modern technical literacy', active: true },
+    { id: 'p1', code: 'YLP', name: 'Youth Leadership Program', description: 'Flagship public speaking and leadership training for ages 12-18', fee: 395, active: true },
+    { id: 'p2', code: 'YHACKS', name: 'YHacks Series', description: 'Youth hackathons, team innovation and technological pitching', fee: 250, active: true },
+    { id: 'p3', code: 'CENTRE_STAGE', name: 'Centre Stage Showcase', description: 'Annual speech tournament and gala theatrical showcase', fee: 320, active: true },
+    { id: 'p4', code: 'YJOBS', name: 'YJobs Career Hub', description: 'Coaching, resumes, interview simulations, and job placement', fee: 180, active: true },
+    { id: 'p5', code: 'YAI', name: 'YAi Artificial Intelligence', description: 'Applied AI ethics, prompt mastery, and modern technical literacy', fee: 295, active: true },
   ]);
 
   // Master Batch Names (New Table: Formulates Program = Program + Batch Name + Term + Location)
@@ -495,6 +548,13 @@ export default function App() {
       allergies: 'None',
       city: 'Markham',
       postalCode: 'L3R 5M9',
+      program: 'Youth Leadership Program',
+      term: 'Winter 2026',
+      batchCode: 'YLP - 1A Winter 2026: 2 Markham',
+      fee: 395,
+      paymentStatus: 'Paid',
+      paymentMethod: 'Credit Card',
+      paymentDate: 'Jan 08, 2026',
       primaryGuardianName: 'David Chen (Father)',
       primaryGuardianPhone: '(647) 555-0192',
       emergencyContactName: 'Rachel Chen (Mother)',
@@ -509,6 +569,13 @@ export default function App() {
       allergies: 'Peanuts (Carry EpiPen)',
       city: 'Markham',
       postalCode: 'L3R 5M9',
+      program: 'Youth Leadership Program',
+      term: 'Winter 2026',
+      batchCode: 'YLP - 1A Winter 2026: 2 Markham',
+      fee: 395,
+      paymentStatus: 'Paid',
+      paymentMethod: 'Interac E-Transfer',
+      paymentDate: 'Jan 09, 2026',
       primaryGuardianName: 'David Chen (Father)',
       primaryGuardianPhone: '(647) 555-0192',
       emergencyContactName: 'Rachel Chen (Mother)',
@@ -523,6 +590,13 @@ export default function App() {
       allergies: 'Asthma (Inhaler in backpack)',
       city: 'Markham',
       postalCode: 'L3R 3P1',
+      program: 'Youth Leadership Program',
+      term: 'Winter 2026',
+      batchCode: 'YLP - 1A Winter 2026: 2 Markham',
+      fee: 395,
+      paymentStatus: 'Paid',
+      paymentMethod: 'Credit Card',
+      paymentDate: 'Jan 07, 2026',
       primaryGuardianName: 'Grace Wong (Mother)',
       primaryGuardianPhone: '(416) 555-8832',
       emergencyContactName: 'Alan Wong (Uncle)',
@@ -537,6 +611,13 @@ export default function App() {
       allergies: 'None',
       city: 'Markham',
       postalCode: 'L3R 8Y2',
+      program: 'Youth Leadership Program',
+      term: 'Winter 2026',
+      batchCode: 'YLP - 1A Winter 2026: 2 Markham',
+      fee: 395,
+      paymentStatus: 'Pending E-Transfer',
+      paymentMethod: 'Interac E-Transfer',
+      paymentDate: 'Pending Verification',
       primaryGuardianName: 'Priya Patel (Mother)',
       primaryGuardianPhone: '(905) 555-4310',
       emergencyContactName: 'Vikram Patel (Father)',
@@ -551,6 +632,13 @@ export default function App() {
       allergies: 'Dairy (Lactose Intolerant)',
       city: 'Richmond Hill',
       postalCode: 'L4C 2A9',
+      program: 'Youth Leadership Program',
+      term: 'Winter 2026',
+      batchCode: 'YLP - 1A Winter 2026: 2 Markham',
+      fee: 395,
+      paymentStatus: 'Pay Later',
+      paymentMethod: 'Pay Later',
+      paymentDate: 'Invoice Pending',
       primaryGuardianName: 'Karen Taylor (Mother)',
       primaryGuardianPhone: '(647) 555-9011',
       emergencyContactName: 'Mark Taylor (Father)',
@@ -688,15 +776,20 @@ export default function App() {
     emergencyContactPhone: '(647) 555-0199',
   });
 
-  const activeBatch = batches.find((b) => b.id === selectedBatchId) || batches[1];
-  const activeSessionMeta = MASTER_SESSIONS.find((s) => s.num === selectedSessionNum) || MASTER_SESSIONS[4];
-  const currentGoogleNotesUrl = sessionNotesLinks[selectedSessionNum] || 'https://docs.google.com';
-
-  const vscInfo = calculateVscStatus(facilitatorProfile.vscIssueDate);
+  const handleCopyEmail = (email = 'payments@cflicanada.ca') => {
+    navigator.clipboard?.writeText(email);
+    setCopiedEmailToast(true);
+    setTimeout(() => setCopiedEmailToast(false), 2000);
+  };
 
   const getRecord = (studentId) => {
     const key = `${selectedSessionNum}_${studentId}`;
     return sessionRecords[key] || { attendance: 'present', feedback: '' };
+  };
+
+  const getProgramFee = (programName) => {
+    const prog = masterProgramsList.find((p) => p.name === programName || p.code === programName);
+    return prog ? prog.fee : 395;
   };
 
   const getStudentAssignment = (studentId) => {
@@ -828,6 +921,10 @@ export default function App() {
       c.primaryGuardianName.includes(parentProfile.lastName)
   );
   const activeChild = myChildren.find((c) => c.studentId === parentActiveChildId) || myChildren[0];
+
+  const activeBatch = batches.find((b) => b.id === selectedBatchId) || batches[0];
+  const vscInfo = calculateVscStatus(facilitatorProfile.vscIssueDate);
+  const currentGoogleNotesUrl = sessionNotesLinks[selectedSessionNum] || sessionNotesLinks[5] || 'https://docs.google.com';
 
   return (
     <div className="min-h-screen bg-[#0d0f17] text-slate-100 flex flex-col items-center justify-start p-2 sm:p-6 font-sans antialiased selection:bg-[#5859A7] selection:text-white">
@@ -1011,32 +1108,33 @@ export default function App() {
                         </span>
                       </div>
                       <p className="text-[11px] text-slate-400 mt-0.5">
-                        Enrol your child, track attendance, meeting roles & speech feedback.
+                        New parent sign-up, child enrolment, attendance tracking & speech feedback.
                       </p>
                     </div>
                   </div>
                 </div>
 
-                <div className="flex items-center space-x-2 mt-3 pt-3 border-t border-slate-800/80">
+                <div className="flex flex-col sm:flex-row items-center gap-2 mt-3 pt-3 border-t border-slate-800/80">
                   <button
                     onClick={() => {
                       setParentActiveTab('dashboard');
                       setActiveRolePerspective('parent');
                     }}
-                    className="flex-1 py-2 px-3 bg-[#E98E30] hover:bg-amber-500 text-slate-950 font-black text-xs rounded-xl flex items-center justify-center space-x-1.5 transition-all shadow-md"
+                    className="w-full sm:flex-1 py-2 px-3 bg-[#E98E30] hover:bg-amber-500 text-slate-950 font-black text-xs rounded-xl flex items-center justify-center space-x-1.5 transition-all shadow-md"
                   >
                     <span>Enter Family Portal</span>
                     <ArrowRight className="w-3.5 h-3.5" />
                   </button>
                   <button
                     onClick={() => {
-                      setActiveRolePerspective('parent');
-                      setIsRegisteringProgram(true);
+                      setSignUpStep(1);
+                      setIsNewParentSignUp(true);
                     }}
-                    className="py-2 px-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs rounded-xl transition-all"
-                    title="Enrol new child"
+                    className="w-full sm:w-auto py-2 px-3 bg-slate-800 hover:bg-slate-700 text-[#FFC513] font-bold text-xs rounded-xl transition-all border border-[#FFC513]/30 flex items-center justify-center space-x-1"
+                    title="New Parent Registration"
                   >
-                    <span>Enrol</span>
+                    <Plus className="w-3 h-3 stroke-[3]" />
+                    <span>New Parent Sign-Up</span>
                   </button>
                 </div>
               </div>
@@ -1551,7 +1649,7 @@ export default function App() {
                     <div className="flex justify-between items-center px-1">
                       <span className="text-xs text-slate-400">Master Program Entities</span>
                       <button
-                        onClick={() => setEditingProgramModal({ id: `p-${Date.now()}`, code: '', name: '', description: '', active: true, isNew: true })}
+                        onClick={() => setEditingProgramModal({ id: `p-${Date.now()}`, code: '', name: '', description: '', fee: 395, active: true, isNew: true })}
                         className="py-1 px-2.5 bg-[#339CA3] text-white text-xs font-bold rounded-xl flex items-center space-x-1"
                       >
                         <Plus className="w-3.5 h-3.5" />
@@ -1568,9 +1666,12 @@ export default function App() {
                                 {prog.code}
                               </span>
                               <h4 className="text-xs font-bold text-white">{prog.name}</h4>
+                              <span className="px-2 py-0.5 rounded-md text-[10px] font-black bg-[#FFC513]/20 text-[#FFC513] border border-[#FFC513]/40">
+                                ${prog.fee || 395} CAD
+                              </span>
                             </div>
                             <button
-                              onClick={() => setEditingProgramModal({ ...prog })}
+                              onClick={() => setEditingProgramModal({ ...prog, fee: prog.fee || 395 })}
                               className="p-1 hover:bg-slate-800 text-slate-400 hover:text-white rounded-lg"
                             >
                               <Pencil className="w-3.5 h-3.5 text-[#FFC513]" />
@@ -1667,7 +1768,14 @@ export default function App() {
                 {adminMasterSubTab === 'terms' && (
                   <div className="space-y-3">
                     <div className="flex justify-between items-center px-1">
-                      <span className="text-xs text-slate-400">Seasonal Program Cycles</span>
+                      <span className="text-xs text-slate-400">Seasonal Program Cycles ({masterTermsList.length})</span>
+                      <button
+                        onClick={() => setEditingTermModal({ id: `t-${Date.now()}`, name: '', season: 'Fall', year: 2026, isCurrent: false, startDate: '2026-09-19', endDate: '2026-11-28', isNew: true })}
+                        className="py-1 px-2.5 bg-[#339CA3] hover:bg-[#339CA3]/90 text-white text-xs font-bold rounded-xl flex items-center space-x-1 transition-all shadow-sm"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>Add Program Term</span>
+                      </button>
                     </div>
 
                     <div className="space-y-2.5">
@@ -1682,6 +1790,13 @@ export default function App() {
                                 </span>
                               )}
                             </div>
+                            <button
+                              onClick={() => setEditingTermModal({ ...term, isNew: false })}
+                              className="p-1 hover:bg-slate-800 text-slate-400 hover:text-white rounded-lg transition-colors"
+                              title="Edit Term Dates"
+                            >
+                              <Pencil className="w-3.5 h-3.5 text-[#FFC513]" />
+                            </button>
                           </div>
                           <p className="text-[11px] text-slate-400">
                             {term.startDate} to {term.endDate} • Season: {term.season} {term.year}
@@ -1841,16 +1956,30 @@ export default function App() {
                 <div className="space-y-3">
                   {batchRoster
                     .filter((s) =>
-                      `${s.firstName} ${s.lastName} ${s.city}`.toLowerCase().includes(adminSearchTerm.toLowerCase())
+                      `${s.firstName} ${s.lastName} ${s.city} ${s.program || ''}`.toLowerCase().includes(adminSearchTerm.toLowerCase())
                     )
                     .map((student) => (
                       <div key={student.studentId} className="p-3.5 bg-slate-900 border border-slate-800 rounded-2xl space-y-2">
                         <div className="flex justify-between items-start">
                           <div>
-                            <h4 className="text-xs font-bold text-white">
-                              {student.firstName} {student.lastName}
-                            </h4>
-                            <p className="text-[10px] text-slate-400">
+                            <div className="flex items-center space-x-2">
+                              <h4 className="text-xs font-bold text-white">
+                                {student.firstName} {student.lastName}
+                              </h4>
+                              {/* Payment Status Badge */}
+                              <span
+                                className={`px-2 py-0.5 rounded-full text-[9px] font-black border ${
+                                  student.paymentStatus === 'Paid'
+                                    ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40'
+                                    : student.paymentStatus === 'Pending E-Transfer'
+                                    ? 'bg-[#E98E30]/20 text-[#E98E30] border-[#E98E30]/40'
+                                    : 'bg-amber-400/20 text-[#FFC513] border-amber-400/40'
+                                }`}
+                              >
+                                {student.paymentStatus} ({student.paymentMethod})
+                              </span>
+                            </div>
+                            <p className="text-[10px] text-slate-400 mt-0.5">
                               Grade {student.grade} • DOB: {student.dob} • {student.city} ({student.postalCode})
                             </p>
                           </div>
@@ -1863,7 +1992,17 @@ export default function App() {
                           </button>
                         </div>
 
-                        <div className="p-2 bg-slate-950 rounded-xl border border-slate-800 text-xs text-slate-300 flex items-center justify-between">
+                        {/* Enrolled Program & Fee */}
+                        <div className="p-2 bg-slate-950 rounded-xl border border-slate-800 text-[11px] flex items-center justify-between">
+                          <span className="text-slate-300">
+                            Program: <strong className="text-white">{student.program || 'Youth Leadership Program'}</strong>
+                          </span>
+                          <span className="text-[#339CA3] font-bold">
+                            ${student.fee || 395} CAD
+                          </span>
+                        </div>
+
+                        <div className="p-2 bg-slate-950/70 rounded-xl border border-slate-800 text-xs text-slate-300 flex items-center justify-between">
                           <span>Primary Guardian: <strong>{student.primaryGuardianName}</strong></span>
                           <span className="text-[#339CA3]">{student.primaryGuardianPhone}</span>
                         </div>
@@ -2561,20 +2700,26 @@ export default function App() {
             {/* TAB CONTENT: PARENT FAMILY HUB */}
             {parentActiveTab === 'dashboard' && (
               <div className="p-4 space-y-4 flex-1 overflow-y-auto">
-                {/* Action Banner: New Program / Child Registration */}
-                <div className="bg-gradient-to-r from-slate-900 via-slate-900 to-[#E98E30]/20 border border-[#E98E30]/40 rounded-2xl p-3.5 flex items-center justify-between shadow-sm">
+                {/* Action Banner: New Sibling Enrolment (Term Promotions Handled by Admin) */}
+                <div className="bg-gradient-to-r from-slate-900 via-slate-900 to-[#E98E30]/20 border border-[#E98E30]/40 rounded-2xl p-3.5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-sm">
                   <div>
                     <span className="text-[10px] font-black uppercase tracking-wider text-[#E98E30] block">
-                      Program Enrolment
+                      Enrol New Sibling
                     </span>
-                    <h3 className="text-xs font-bold text-white">Register for Next Term or Add Sibling</h3>
+                    <h3 className="text-xs font-bold text-white">Add Another Child to CFLI Programs</h3>
+                    <p className="text-[10px] text-slate-400 mt-0.5">
+                      Note: Next-term cohort promotions (Level 1 → Level 2) for current students are managed automatically by CFLI Admin.
+                    </p>
                   </div>
                   <button
-                    onClick={() => setIsRegisteringProgram(true)}
-                    className="py-1.5 px-3 bg-[#E98E30] hover:bg-amber-500 text-slate-950 font-black text-xs rounded-xl flex items-center space-x-1 transition-all shadow-md"
+                    onClick={() => {
+                      setEnrolmentStep('child');
+                      setIsRegisteringProgram(true);
+                    }}
+                    className="py-1.5 px-3 bg-[#E98E30] hover:bg-amber-500 text-slate-950 font-black text-xs rounded-xl flex items-center space-x-1 transition-all shadow-md shrink-0"
                   >
                     <Plus className="w-3.5 h-3.5 stroke-[3]" />
-                    <span>New Enrolment</span>
+                    <span>+ Enrol Sibling</span>
                   </button>
                 </div>
 
@@ -2584,7 +2729,10 @@ export default function App() {
                       Enrolled Children ({myChildren.length})
                     </span>
                     <button
-                      onClick={() => setIsRegisteringProgram(true)}
+                      onClick={() => {
+                        setEnrolmentStep('child');
+                        setIsRegisteringProgram(true);
+                      }}
                       className="text-xs text-[#E98E30] font-bold hover:underline flex items-center space-x-0.5"
                     >
                       <Plus className="w-3 h-3" />
@@ -2618,9 +2766,52 @@ export default function App() {
                           </button>
                         </div>
 
+                        {/* Program & Payment Status Banner */}
+                        <div className="p-2.5 bg-slate-900 rounded-xl border border-slate-800/80 space-y-1.5">
+                          <div className="flex justify-between items-center text-xs">
+                            <span className="text-slate-300 font-semibold truncate max-w-[190px]">
+                              {child.program || 'Youth Leadership Program'}
+                            </span>
+                            <span className="text-white font-bold text-[11px]">
+                              ${child.fee || 395} CAD
+                            </span>
+                          </div>
+
+                          <div className="flex flex-wrap items-center justify-between gap-1.5 pt-1 border-t border-slate-800/70">
+                            <div className="flex items-center space-x-1.5">
+                              <span className="text-[10px] text-slate-400">Payment:</span>
+                              <span
+                                className={`px-2 py-0.5 rounded-full text-[9px] font-black border flex items-center space-x-1 ${
+                                  child.paymentStatus === 'Paid'
+                                    ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                                    : child.paymentStatus === 'Pending E-Transfer'
+                                    ? 'bg-[#E98E30]/20 text-[#E98E30] border-[#E98E30]/40'
+                                    : 'bg-amber-400/20 text-[#FFC513] border-amber-400/40'
+                                }`}
+                              >
+                                {child.paymentStatus === 'Paid' && <CheckCircle2 className="w-2.5 h-2.5" />}
+                                {child.paymentStatus === 'Pending E-Transfer' && <Clock className="w-2.5 h-2.5" />}
+                                {child.paymentStatus === 'Pay Later' && <AlertCircle className="w-2.5 h-2.5" />}
+                                <span>{child.paymentStatus} ({child.paymentMethod})</span>
+                              </span>
+                            </div>
+
+                            {/* Settle Payment Action if not Paid */}
+                            {child.paymentStatus !== 'Paid' && (
+                              <button
+                                onClick={() => setSettlingPaymentChild(child)}
+                                className="px-2 py-0.5 bg-[#FFC513] hover:bg-amber-400 text-slate-950 text-[10px] font-black rounded-lg transition-all shadow-xs flex items-center space-x-1"
+                              >
+                                <CreditCard className="w-2.5 h-2.5" />
+                                <span>Pay Now</span>
+                              </button>
+                            )}
+                          </div>
+                        </div>
+
                         <div className="flex items-center justify-between pt-1 border-t border-slate-900 text-[10px] text-slate-400">
                           <span>Allergies: <strong className={child.allergies === 'None' ? 'text-slate-300' : 'text-amber-300'}>{child.allergies}</strong></span>
-                          <span className="text-[#339CA3] font-semibold">Winter 2026 Active</span>
+                          <span className="text-[#339CA3] font-semibold">{child.term || 'Winter 2026'} Active</span>
                         </div>
                       </div>
                     ))}
@@ -2832,13 +3023,68 @@ export default function App() {
             {/* TAB CONTENT: STUDENT PREP & ROLES */}
             {studentActiveTab === 'prep' && (
               <div className="p-4 space-y-4 flex-1 overflow-y-auto">
+                {/* My Next Meeting Role */}
                 <div className="p-3.5 bg-slate-900 border border-slate-800 rounded-2xl space-y-2 text-xs">
                   <div className="flex justify-between items-center">
-                    <span className="font-bold text-white">My Next Role:</span>
-                    <span className="px-2 py-0.5 rounded bg-[#FFC513] text-slate-950 font-bold">Chairperson</span>
+                    <span className="font-bold text-white">My Next Role (Session 5):</span>
+                    <span className="px-2.5 py-0.5 rounded-full bg-[#FFC513] text-slate-950 font-black text-xs">
+                      Chairperson
+                    </span>
                   </div>
-                  <p className="text-slate-300">Category: Prepared Speech</p>
-                  <p className="text-slate-400">Topic: "The Power of Resilience: Overcoming High School Obstacles"</p>
+                  <div className="p-2 bg-slate-950 rounded-xl border border-slate-800 space-y-1">
+                    <div className="flex justify-between text-[11px]">
+                      <span className="text-slate-400">Speech Category:</span>
+                      <strong className="text-white">Prepared Speech</strong>
+                    </div>
+                    <div className="flex justify-between text-[11px]">
+                      <span className="text-slate-400">Assigned Topic:</span>
+                      <span className="text-[#339CA3] font-medium text-right max-w-[200px]">
+                        The Power of Resilience: Overcoming High School Obstacles
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Facilitator Published Session Notes Card */}
+                <div className="p-3.5 bg-gradient-to-r from-slate-900 via-slate-900 to-[#5859A7]/25 border border-[#5859A7]/40 rounded-2xl space-y-2.5 shadow-md">
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-center space-x-2">
+                      <div className="w-8 h-8 rounded-xl bg-[#5859A7]/30 border border-[#5859A7]/50 text-indigo-300 flex items-center justify-center">
+                        <BookOpen className="w-4 h-4 text-[#FFC513]" />
+                      </div>
+                      <div>
+                        <span className="text-[10px] font-black uppercase tracking-wider text-[#FFC513] block">
+                          Curriculum Materials
+                        </span>
+                        <h4 className="text-xs font-bold text-white">Facilitator Session Notes</h4>
+                      </div>
+                    </div>
+                    <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-[#339CA3]/20 text-[#339CA3] border border-[#339CA3]/40">
+                      Session 5 Active
+                    </span>
+                  </div>
+
+                  <p className="text-[11px] text-slate-300 leading-relaxed">
+                    Access the weekly meeting outline, speaking guidelines, timer parameters, and facilitator feedback rubrics for this Saturday.
+                  </p>
+
+                  <div className="pt-1">
+                    <a
+                      href={currentGoogleNotesUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="w-full py-2.5 px-3 bg-[#FFC513] hover:bg-amber-400 text-slate-950 font-black text-xs rounded-xl flex items-center justify-center space-x-2 transition-all shadow-md group"
+                    >
+                      <BookOpen className="w-4 h-4" />
+                      <span>Open Published Session Notes (Google Doc)</span>
+                      <ExternalLink className="w-3.5 h-3.5 text-slate-800 group-hover:translate-x-0.5 transition-transform" />
+                    </a>
+                  </div>
+
+                  <div className="flex items-center justify-between text-[10px] text-slate-400 pt-1 border-t border-slate-800/80">
+                    <span>Published by Lead: <strong>Marcus Vance</strong></span>
+                    <span className="text-emerald-400 font-semibold">Live Google Doc</span>
+                  </div>
                 </div>
               </div>
             )}
@@ -3278,6 +3524,20 @@ export default function App() {
                   placeholder="e.g. Youth Leadership Program"
                   value={editingProgramModal.name}
                   onChange={(e) => setEditingProgramModal({ ...editingProgramModal, name: e.target.value })}
+                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-white"
+                />
+              </div>
+
+              <div>
+                <label className="text-[9px] font-bold uppercase text-slate-400 block mb-1">Tuition Fee (CAD $)</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  required
+                  placeholder="395"
+                  value={editingProgramModal.fee ?? 395}
+                  onChange={(e) => setEditingProgramModal({ ...editingProgramModal, fee: parseFloat(e.target.value) || 0 })}
                   className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-white"
                 />
               </div>
@@ -4066,6 +4326,10 @@ export default function App() {
             <form
               onSubmit={(e) => {
                 e.preventDefault();
+                if (!parentProfile.email || !parentProfile.phone || !parentProfile.emergencyContactName || !parentProfile.emergencyContactPhone) {
+                  triggerSavedToast('Please fill all required guardian fields.');
+                  return;
+                }
                 setIsEditingParentProfile(false);
                 triggerSavedToast('Parent Profile Updated!');
               }}
@@ -4087,7 +4351,7 @@ export default function App() {
 
               <div>
                 <label className="text-[10px] font-bold uppercase text-slate-400 block mb-1">
-                  Full Name
+                  Full Name *
                 </label>
                 <div className="grid grid-cols-2 gap-2">
                   <input
@@ -4109,8 +4373,8 @@ export default function App() {
 
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="text-[10px] font-bold uppercase text-slate-400 block mb-1">
-                    Mobile Phone
+                  <label className="text-[10px] font-bold uppercase text-[#FFC513] block mb-1">
+                    Mobile Phone *
                   </label>
                   <input
                     type="tel"
@@ -4121,8 +4385,8 @@ export default function App() {
                   />
                 </div>
                 <div>
-                  <label className="text-[10px] font-bold uppercase text-slate-400 block mb-1">
-                    Email Address
+                  <label className="text-[10px] font-bold uppercase text-[#FFC513] block mb-1">
+                    Email Address *
                   </label>
                   <input
                     type="email"
@@ -4162,22 +4426,32 @@ export default function App() {
               </div>
 
               <div className="space-y-2 pt-1 border-t border-slate-800">
-                <span className="text-[10px] font-bold uppercase text-slate-400 block">Emergency Contact</span>
+                <span className="text-[10px] font-bold uppercase text-[#FFC513] block">
+                  Emergency Contact (Mandatory) *
+                </span>
                 <div className="grid grid-cols-2 gap-2">
-                  <input
-                    type="text"
-                    placeholder="Contact Name"
-                    value={parentProfile.emergencyContactName}
-                    onChange={(e) => setParentProfile({ ...parentProfile, emergencyContactName: e.target.value })}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-white"
-                  />
-                  <input
-                    type="tel"
-                    placeholder="Contact Phone"
-                    value={parentProfile.emergencyContactPhone}
-                    onChange={(e) => setParentProfile({ ...parentProfile, emergencyContactPhone: e.target.value })}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-white"
-                  />
+                  <div>
+                    <label className="text-[9px] font-bold uppercase text-slate-400 block mb-0.5">Contact Name *</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="Contact Name"
+                      value={parentProfile.emergencyContactName}
+                      onChange={(e) => setParentProfile({ ...parentProfile, emergencyContactName: e.target.value })}
+                      className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[9px] font-bold uppercase text-slate-400 block mb-0.5">Contact Phone *</label>
+                    <input
+                      type="tel"
+                      required
+                      placeholder="Contact Phone"
+                      value={parentProfile.emergencyContactPhone}
+                      onChange={(e) => setParentProfile({ ...parentProfile, emergencyContactPhone: e.target.value })}
+                      className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-white"
+                    />
+                  </div>
                 </div>
               </div>
 
@@ -4339,86 +4613,678 @@ export default function App() {
         {/* ----------------------------------------------------------------- */}
         {/* MODAL: NEW PROGRAM REGISTRATION / CHILD ENROLMENT WIZARD          */}
         {/* ----------------------------------------------------------------- */}
+        {/* MODAL: SIBLING ENROLMENT WITH CREDIT CARD PAYMENT (PARENTS)        */}
+        {/* ----------------------------------------------------------------- */}
         {isRegisteringProgram && (
           <div className="absolute inset-0 bg-slate-950/90 backdrop-blur-md z-50 flex items-center justify-center p-3">
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                if (newRegChildType === 'new') {
-                  const newChildId = `s-${Date.now()}`;
-                  const createdChild = {
-                    studentId: newChildId,
-                    firstName: newRegistrationData.firstName,
-                    lastName: newRegistrationData.lastName,
-                    grade: parseInt(newRegistrationData.grade),
-                    dob: newRegistrationData.dob,
-                    allergies: newRegistrationData.allergies || 'None',
-                    city: newRegistrationData.city || 'Markham',
-                    postalCode: newRegistrationData.postalCode || 'L3R 5M9',
-                    primaryGuardianName: `${parentProfile.firstName} ${parentProfile.lastName} (Parent)`,
-                    primaryGuardianPhone: parentProfile.phone,
-                    emergencyContactName: parentProfile.emergencyContactName,
-                    emergencyContactPhone: parentProfile.emergencyContactPhone,
-                  };
-                  setBatchRoster((prev) => [createdChild, ...prev]);
-                  triggerSavedToast(`Enrolled ${createdChild.firstName} into ${newRegistrationData.batchCode}!`);
-                } else {
-                  triggerSavedToast(`Registration confirmed for ${newRegistrationData.batchCode}!`);
-                }
-                setIsRegisteringProgram(false);
-              }}
-              className="bg-slate-900 border border-slate-700 w-full max-w-sm rounded-3xl p-5 shadow-2xl space-y-3 animate-in fade-in max-h-[92vh] overflow-y-auto"
-            >
+            <div className="bg-slate-900 border border-slate-700 w-full max-w-sm rounded-3xl p-5 shadow-2xl space-y-3 animate-in fade-in max-h-[92vh] overflow-y-auto">
               <div className="flex justify-between items-center pb-1 border-b border-slate-800">
                 <div className="flex items-center space-x-2">
                   <div className="w-7 h-7 rounded-lg bg-[#E98E30]/20 text-[#E98E30] flex items-center justify-center font-bold">
                     <Plus className="w-4 h-4 stroke-[3]" />
                   </div>
-                  <h3 className="font-extrabold text-white text-sm">Program & Child Enrolment</h3>
+                  <div>
+                    <h3 className="font-extrabold text-white text-sm">Enrol Sibling Child</h3>
+                    <span className="text-[10px] text-slate-400">
+                      Step {enrolmentStep === 'child' ? '1: Details' : '2: Payment'}
+                    </span>
+                  </div>
                 </div>
                 <button
                   type="button"
-                  onClick={() => setIsRegisteringProgram(false)}
+                  onClick={() => {
+                    setIsRegisteringProgram(false);
+                    setEnrolmentStep('child');
+                  }}
                   className="p-1 text-slate-400 hover:text-white"
                 >
                   <X className="w-4 h-4" />
                 </button>
               </div>
 
-              {/* Selector: New Child vs Existing Child */}
-              <div className="bg-slate-950 p-1 border border-slate-800 rounded-xl flex space-x-1">
+              {enrolmentStep === 'child' ? (
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    setEnrolmentStep('payment');
+                  }}
+                  className="space-y-3"
+                >
+                  <div className="space-y-2">
+                    <span className="text-[10px] font-bold uppercase text-[#FFC513] block">1. Sibling Identity</span>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="text-[9px] font-bold uppercase text-slate-400 block mb-1">First Name *</label>
+                        <input
+                          type="text"
+                          required
+                          placeholder="First name"
+                          value={newRegistrationData.firstName}
+                          onChange={(e) => setNewRegistrationData({ ...newRegistrationData, firstName: e.target.value })}
+                          className="w-full bg-slate-950 border border-slate-700 rounded-xl px-2.5 py-1.5 text-xs text-white"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[9px] font-bold uppercase text-slate-400 block mb-1">Last Name *</label>
+                        <input
+                          type="text"
+                          required
+                          placeholder="Last name"
+                          value={newRegistrationData.lastName}
+                          onChange={(e) => setNewRegistrationData({ ...newRegistrationData, lastName: e.target.value })}
+                          className="w-full bg-slate-950 border border-slate-700 rounded-xl px-2.5 py-1.5 text-xs text-white"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="text-[9px] font-bold uppercase text-[#FFC513] block mb-1">
+                        Mandatory Date of Birth *
+                      </label>
+                      <input
+                        type="date"
+                        required
+                        value={newRegistrationData.dob}
+                        onChange={(e) => setNewRegistrationData({ ...newRegistrationData, dob: e.target.value })}
+                        className="w-full bg-slate-950 border border-slate-700 rounded-xl px-2.5 py-1.5 text-xs text-white"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="text-[9px] font-bold uppercase text-slate-400 block mb-1">Grade Level</label>
+                        <select
+                          value={newRegistrationData.grade}
+                          onChange={(e) => setNewRegistrationData({ ...newRegistrationData, grade: parseInt(e.target.value) })}
+                          className="w-full bg-slate-950 border border-slate-700 rounded-xl px-2.5 py-1.5 text-xs font-bold text-white"
+                        >
+                          {[7, 8, 9, 10, 11, 12].map((g) => (
+                            <option key={g} value={g}>Grade {g}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-[9px] font-bold uppercase text-slate-400 block mb-1">Postal Code</label>
+                        <input
+                          type="text"
+                          value={newRegistrationData.postalCode}
+                          onChange={(e) => setNewRegistrationData({ ...newRegistrationData, postalCode: e.target.value.toUpperCase() })}
+                          className="w-full bg-slate-950 border border-slate-700 rounded-xl px-2.5 py-1.5 text-xs text-white uppercase"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="text-[9px] font-bold uppercase text-slate-400 block mb-1">Medical / Allergies</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Peanuts, Asthma, None"
+                        value={newRegistrationData.allergies}
+                        onChange={(e) => setNewRegistrationData({ ...newRegistrationData, allergies: e.target.value })}
+                        className="w-full bg-slate-950 border border-slate-700 rounded-xl px-2.5 py-1.5 text-xs text-white"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-2 pt-2 border-t border-slate-800">
+                    <span className="text-[10px] font-bold uppercase text-[#339CA3] block">2. Program & Cohort</span>
+
+                    <div>
+                      <label className="text-[9px] font-bold uppercase text-slate-400 block mb-1">Select Program</label>
+                      <select
+                        value={newRegistrationData.program}
+                        onChange={(e) => setNewRegistrationData({ ...newRegistrationData, program: e.target.value })}
+                        className="w-full bg-slate-950 border border-slate-700 rounded-xl px-2.5 py-1.5 text-xs font-bold text-white"
+                      >
+                        {masterProgramsList.map((p) => (
+                          <option key={p.id} value={p.name}>
+                            {p.name} — ${p.fee || 395} CAD
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="text-[9px] font-bold uppercase text-slate-400 block mb-1">Select Cohort & Location</label>
+                      <select
+                        value={newRegistrationData.batchCode}
+                        onChange={(e) => setNewRegistrationData({ ...newRegistrationData, batchCode: e.target.value })}
+                        className="w-full bg-slate-950 border border-slate-700 rounded-xl px-2.5 py-1.5 text-xs font-bold text-white"
+                      >
+                        <option value="YLP - 1A Spring 2026: 1 Markham">YLP - 1A Spring 2026: 1 Markham (Saturdays 10:00 AM)</option>
+                        <option value="YLP - 1A Spring 2026: 2 Markham">YLP - 1A Spring 2026: 2 Markham (Saturdays 1:00 PM)</option>
+                        <option value="YLP - 2A Spring 2026: 3 Markham">YLP - 2A Spring 2026: 3 Markham (Saturdays 1:00 PM)</option>
+                        <option value="YLP - 1A Spring 2026: 4 Markham">YLP - 1A Spring 2026: 4 Markham (Saturdays 3:30 PM)</option>
+                        <option value="YLP - 1A Spring 2026: 5 Markham">YLP - 1A Spring 2026: 5 Markham (Saturdays 3:30 PM)</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="flex space-x-2 pt-2 border-t border-slate-800">
+                    <button
+                      type="button"
+                      onClick={() => setIsRegisteringProgram(false)}
+                      className="flex-1 py-2 bg-slate-800 text-slate-300 font-bold text-xs rounded-xl hover:bg-slate-700"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      className="flex-1 py-2 bg-[#E98E30] text-slate-950 font-black text-xs rounded-xl hover:opacity-95 shadow-md flex items-center justify-center space-x-1"
+                    >
+                      <span>Proceed to Payment (${getProgramFee(newRegistrationData.program)} CAD)</span>
+                      <ArrowRight className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </form>
+              ) : (
+                /* Payment Options Step: Credit Card | E-Transfer | Pay Later */
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    setIsProcessingPayment(true);
+                    setTimeout(() => {
+                      setIsProcessingPayment(false);
+                      const newChildId = `s-${Date.now()}`;
+                      const fee = getProgramFee(newRegistrationData.program);
+
+                      let finalStatus = 'Paid';
+                      let finalMethod = 'Credit Card';
+                      if (newRegistrationData.paymentMethod === 'etransfer') {
+                        finalStatus = 'Pending E-Transfer';
+                        finalMethod = 'Interac E-Transfer';
+                      } else if (newRegistrationData.paymentMethod === 'pay_later') {
+                        finalStatus = 'Pay Later';
+                        finalMethod = 'Pay Later';
+                      }
+
+                      const createdChild = {
+                        studentId: newChildId,
+                        firstName: newRegistrationData.firstName,
+                        lastName: newRegistrationData.lastName,
+                        grade: parseInt(newRegistrationData.grade),
+                        dob: newRegistrationData.dob,
+                        allergies: newRegistrationData.allergies || 'None',
+                        city: newRegistrationData.city || 'Markham',
+                        postalCode: newRegistrationData.postalCode || 'L3R 5M9',
+                        program: newRegistrationData.program,
+                        term: newRegistrationData.term || 'Spring 2026',
+                        batchCode: newRegistrationData.batchCode,
+                        fee: fee,
+                        paymentStatus: finalStatus,
+                        paymentMethod: finalMethod,
+                        paymentDate: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+                        primaryGuardianName: `${parentProfile.firstName} ${parentProfile.lastName} (Parent)`,
+                        primaryGuardianPhone: parentProfile.phone,
+                        emergencyContactName: parentProfile.emergencyContactName,
+                        emergencyContactPhone: parentProfile.emergencyContactPhone,
+                      };
+                      setBatchRoster((prev) => [createdChild, ...prev]);
+                      setIsRegisteringProgram(false);
+                      setEnrolmentStep('child');
+
+                      if (finalStatus === 'Paid') {
+                        triggerSavedToast(`Payment confirmed! ${createdChild.firstName} enrolled into ${newRegistrationData.program}.`);
+                      } else if (finalStatus === 'Pending E-Transfer') {
+                        triggerSavedToast(`Registration submitted! Send E-Transfer to payments@cflicanada.ca.`);
+                      } else {
+                        triggerSavedToast(`Enrolment saved as Pay Later! Invoice will be emailed.`);
+                      }
+                    }, 1000);
+                  }}
+                  className="space-y-3"
+                >
+                  {/* Fee Summary */}
+                  <div className="p-3 bg-slate-950 rounded-2xl border border-slate-800 space-y-1.5 text-xs">
+                    <div className="flex justify-between text-slate-300">
+                      <span>Program Tuition:</span>
+                      <strong className="text-white">${getProgramFee(newRegistrationData.program)}.00 CAD</strong>
+                    </div>
+                    <div className="flex justify-between text-slate-300">
+                      <span>Student:</span>
+                      <span className="text-[#339CA3] font-bold">{newRegistrationData.firstName} {newRegistrationData.lastName}</span>
+                    </div>
+                    <div className="flex justify-between text-slate-300">
+                      <span>Cohort:</span>
+                      <span className="text-slate-400 truncate max-w-[190px]">{newRegistrationData.batchCode}</span>
+                    </div>
+                    <div className="pt-1.5 border-t border-slate-800 flex justify-between items-center">
+                      <span className="font-bold text-white text-xs">Amount Due:</span>
+                      <span className="text-base font-black text-[#FFC513]">
+                        ${getProgramFee(newRegistrationData.program)}.00 CAD
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* 3 Payment Options Selector */}
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-bold uppercase text-slate-400 block">
+                      Select Payment Option
+                    </label>
+                    <div className="grid grid-cols-3 gap-1.5 p-1 bg-slate-950 border border-slate-800 rounded-xl">
+                      <button
+                        type="button"
+                        onClick={() => setNewRegistrationData({ ...newRegistrationData, paymentMethod: 'credit_card' })}
+                        className={`py-2 px-1 text-[11px] font-bold rounded-lg transition-all flex flex-col items-center justify-center space-y-1 ${
+                          newRegistrationData.paymentMethod === 'credit_card'
+                            ? 'bg-[#FFC513] text-slate-950 shadow-sm'
+                            : 'text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        <CreditCard className="w-4 h-4" />
+                        <span>Credit Card</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setNewRegistrationData({ ...newRegistrationData, paymentMethod: 'etransfer' })}
+                        className={`py-2 px-1 text-[11px] font-bold rounded-lg transition-all flex flex-col items-center justify-center space-y-1 ${
+                          newRegistrationData.paymentMethod === 'etransfer'
+                            ? 'bg-[#339CA3] text-white shadow-sm'
+                            : 'text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        <Landmark className="w-4 h-4" />
+                        <span>E-Transfer</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setNewRegistrationData({ ...newRegistrationData, paymentMethod: 'pay_later' })}
+                        className={`py-2 px-1 text-[11px] font-bold rounded-lg transition-all flex flex-col items-center justify-center space-y-1 ${
+                          newRegistrationData.paymentMethod === 'pay_later'
+                            ? 'bg-[#5859A7] text-white shadow-sm'
+                            : 'text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        <Clock className="w-4 h-4" />
+                        <span>Pay Later</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* OPTION 1: CREDIT CARD GATEWAY */}
+                  {newRegistrationData.paymentMethod === 'credit_card' && (
+                    <div className="space-y-2 p-3 bg-slate-950 rounded-2xl border border-slate-800 animate-in fade-in">
+                      <span className="text-[10px] font-bold uppercase text-[#FFC513] block flex items-center space-x-1">
+                        <CreditCard className="w-3.5 h-3.5" />
+                        <span>Credit Card Payment Gateway</span>
+                      </span>
+
+                      <div>
+                        <label className="text-[9px] font-bold uppercase text-slate-400 block mb-1">Cardholder Name *</label>
+                        <input
+                          type="text"
+                          required={newRegistrationData.paymentMethod === 'credit_card'}
+                          placeholder="Name on card"
+                          value={newRegistrationData.cardName}
+                          onChange={(e) => setNewRegistrationData({ ...newRegistrationData, cardName: e.target.value })}
+                          className="w-full bg-slate-900 border border-slate-700 rounded-xl px-2.5 py-1.5 text-xs text-white"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="text-[9px] font-bold uppercase text-slate-400 block mb-1">Card Number *</label>
+                        <input
+                          type="text"
+                          required={newRegistrationData.paymentMethod === 'credit_card'}
+                          maxLength={19}
+                          placeholder="•••• •••• •••• ••••"
+                          value={newRegistrationData.cardNumber}
+                          onChange={(e) => setNewRegistrationData({ ...newRegistrationData, cardNumber: e.target.value })}
+                          className="w-full bg-slate-900 border border-slate-700 rounded-xl px-2.5 py-1.5 text-xs text-white"
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="text-[9px] font-bold uppercase text-slate-400 block mb-1">Expiry (MM/YY) *</label>
+                          <input
+                            type="text"
+                            required={newRegistrationData.paymentMethod === 'credit_card'}
+                            maxLength={5}
+                            placeholder="MM/YY"
+                            value={newRegistrationData.cardExp}
+                            onChange={(e) => setNewRegistrationData({ ...newRegistrationData, cardExp: e.target.value })}
+                            className="w-full bg-slate-900 border border-slate-700 rounded-xl px-2.5 py-1.5 text-xs text-white"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[9px] font-bold uppercase text-slate-400 block mb-1">CVC *</label>
+                          <input
+                            type="password"
+                            required={newRegistrationData.paymentMethod === 'credit_card'}
+                            maxLength={4}
+                            placeholder="•••"
+                            value={newRegistrationData.cardCvc}
+                            onChange={(e) => setNewRegistrationData({ ...newRegistrationData, cardCvc: e.target.value })}
+                            className="w-full bg-slate-900 border border-slate-700 rounded-xl px-2.5 py-1.5 text-xs text-white"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="p-2 bg-emerald-500/10 rounded-xl border border-emerald-500/30 text-[10px] text-emerald-300 flex items-center space-x-1.5">
+                        <Lock className="w-3.5 h-3.5 shrink-0" />
+                        <span>256-bit SSL Encrypted • Direct Card Gateway</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* OPTION 2: INTERAC E-TRANSFER WITH CANADIAN TOP 7 BANKS */}
+                  {newRegistrationData.paymentMethod === 'etransfer' && (
+                    <div className="space-y-2.5 p-3 bg-slate-950 rounded-2xl border border-[#339CA3]/40 animate-in fade-in text-xs">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-black uppercase text-[#339CA3] tracking-wider flex items-center space-x-1">
+                          <Landmark className="w-3.5 h-3.5" />
+                          <span>Interac e-Transfer Instructions</span>
+                        </span>
+                        <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                          Auto-Deposit ON
+                        </span>
+                      </div>
+
+                      {/* Recipient Email & Copy */}
+                      <div className="p-2.5 bg-slate-900 rounded-xl border border-slate-800 space-y-1">
+                        <span className="text-[9px] uppercase font-bold text-slate-400 block">Send e-Transfer To:</span>
+                        <div className="flex items-center justify-between">
+                          <code className="text-[#FFC513] font-mono text-xs font-bold selection:bg-[#5859A7]">
+                            payments@cflicanada.ca
+                          </code>
+                          <button
+                            type="button"
+                            onClick={() => handleCopyEmail('payments@cflicanada.ca')}
+                            className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 text-[10px] font-bold rounded-lg flex items-center space-x-1 border border-slate-700"
+                          >
+                            <Copy className="w-3 h-3 text-[#339CA3]" />
+                            <span>{copiedEmailToast ? 'Copied!' : 'Copy'}</span>
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="p-2 bg-slate-900/60 rounded-xl border border-slate-800/80 text-[10px] text-slate-300 space-y-1">
+                        <p><strong>Transfer Message Note:</strong> Please include student name (<strong>{newRegistrationData.firstName} {newRegistrationData.lastName}</strong>) and program in the note.</p>
+                        <p className="text-slate-400 text-[9px]">No security question required (CFLI has Interac Auto-Deposit enabled).</p>
+                      </div>
+
+                      {/* Top 7 Major Canadian Banks Direct Links */}
+                      <div className="space-y-1.5 pt-1">
+                        <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400 block">
+                          Log In to Your Bank (Top 7 Canadian Banks):
+                        </span>
+                        <div className="grid grid-cols-2 gap-1.5">
+                          {CANADIAN_MAJOR_BANKS.map((bank) => (
+                            <a
+                              key={bank.name}
+                              href={bank.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="p-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-slate-700 rounded-xl flex items-center justify-between text-[10px] font-bold text-white transition-all group"
+                            >
+                              <div className="flex items-center space-x-1.5 truncate">
+                                <span className={`w-2 h-2 rounded-full ${bank.badge}`} />
+                                <span className="truncate">{bank.name}</span>
+                              </div>
+                              <ExternalLink className="w-3 h-3 text-slate-500 group-hover:text-[#FFC513] shrink-0" />
+                            </a>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* OPTION 3: PAY LATER */}
+                  {newRegistrationData.paymentMethod === 'pay_later' && (
+                    <div className="p-3 bg-slate-950 rounded-2xl border border-[#5859A7]/40 space-y-2 animate-in fade-in text-xs">
+                      <div className="flex items-center space-x-1.5 text-[#FFC513] font-bold">
+                        <Clock className="w-4 h-4" />
+                        <span>Pay Later (Deferred Invoicing)</span>
+                      </div>
+                      <p className="text-[11px] text-slate-300 leading-relaxed">
+                        Your spot for <strong>{newRegistrationData.firstName} {newRegistrationData.lastName}</strong> in <strong>{newRegistrationData.program}</strong> will be reserved immediately with status <span className="text-amber-400 font-bold">Pay Later</span>.
+                      </p>
+                      <div className="p-2 bg-slate-900 rounded-xl border border-slate-800 text-[10px] text-slate-400">
+                        An itemized electronic invoice of <strong>${getProgramFee(newRegistrationData.program)}.00 CAD</strong> will be emailed to <strong>{parentProfile.email}</strong>. Payment can be settled anytime before Session 1 via the Parent Portal.
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Submit / Back Action Buttons */}
+                  <div className="flex space-x-2 pt-2 border-t border-slate-800">
+                    <button
+                      type="button"
+                      disabled={isProcessingPayment}
+                      onClick={() => setEnrolmentStep('child')}
+                      className="py-2 px-3 bg-slate-800 text-slate-300 font-bold text-xs rounded-xl hover:bg-slate-700"
+                    >
+                      Back
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={isProcessingPayment}
+                      className="flex-1 py-2 bg-gradient-to-r from-[#FFC513] to-[#E98E30] text-slate-950 font-black text-xs rounded-xl hover:opacity-95 shadow-md flex items-center justify-center space-x-1"
+                    >
+                      {isProcessingPayment ? (
+                        <span>Processing...</span>
+                      ) : newRegistrationData.paymentMethod === 'credit_card' ? (
+                        <span>Pay ${getProgramFee(newRegistrationData.program)} CAD & Enrol</span>
+                      ) : newRegistrationData.paymentMethod === 'etransfer' ? (
+                        <span>Confirm E-Transfer Initiated</span>
+                      ) : (
+                        <span>Complete Registration (Pay Later)</span>
+                      )}
+                    </button>
+                  </div>
+                </form>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ----------------------------------------------------------------- */}
+        {/* MODAL: SETTLE PAYMENT FOR EXISTING CHILD (PAY LATER / E-TRANSFER)   */}
+        {/* ----------------------------------------------------------------- */}
+        {settlingPaymentChild && (
+          <div className="absolute inset-0 bg-slate-950/90 backdrop-blur-md z-50 flex items-center justify-center p-3">
+            <div className="bg-slate-900 border border-slate-700 w-full max-w-sm rounded-3xl p-5 shadow-2xl space-y-3.5 animate-in fade-in max-h-[92vh] overflow-y-auto">
+              <div className="flex justify-between items-center pb-2 border-b border-slate-800">
+                <div className="flex items-center space-x-2">
+                  <CreditCard className="w-5 h-5 text-[#FFC513]" />
+                  <div>
+                    <h3 className="font-extrabold text-white text-sm">Settle Tuition Payment</h3>
+                    <span className="text-[10px] text-slate-400">{settlingPaymentChild.firstName} {settlingPaymentChild.lastName}</span>
+                  </div>
+                </div>
                 <button
                   type="button"
-                  onClick={() => setNewRegChildType('new')}
-                  className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all ${
-                    newRegChildType === 'new' ? 'bg-[#E98E30] text-slate-950' : 'text-slate-400 hover:text-white'
-                  }`}
+                  onClick={() => setSettlingPaymentChild(null)}
+                  className="p-1 text-slate-400 hover:text-white"
                 >
-                  Enrol New Child
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setNewRegChildType('existing')}
-                  className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all ${
-                    newRegChildType === 'existing' ? 'bg-[#E98E30] text-slate-950' : 'text-slate-400 hover:text-white'
-                  }`}
-                >
-                  Existing Child
+                  <X className="w-4 h-4" />
                 </button>
               </div>
 
-              {newRegChildType === 'new' ? (
-                <div className="space-y-2">
-                  <span className="text-[10px] font-bold uppercase text-[#FFC513] block">1. Child Identity</span>
+              {/* Status & Amount */}
+              <div className="p-3 bg-slate-950 rounded-2xl border border-slate-800 space-y-1 text-xs">
+                <div className="flex justify-between text-slate-300">
+                  <span>Program:</span>
+                  <strong className="text-white">{settlingPaymentChild.program || 'Youth Leadership Program'}</strong>
+                </div>
+                <div className="flex justify-between text-slate-300">
+                  <span>Current Pay Status:</span>
+                  <span className="text-[#E98E30] font-bold">{settlingPaymentChild.paymentStatus}</span>
+                </div>
+                <div className="pt-1.5 border-t border-slate-800 flex justify-between items-center">
+                  <span className="font-bold text-white text-xs">Balance Outstanding:</span>
+                  <span className="text-base font-black text-[#FFC513]">
+                    ${settlingPaymentChild.fee || 395}.00 CAD
+                  </span>
+                </div>
+              </div>
+
+              {/* Settle Options */}
+              <div className="space-y-3">
+                {/* Pay by Credit Card Now */}
+                <div className="p-3 bg-slate-950 rounded-2xl border border-slate-800 space-y-2">
+                  <span className="text-[10px] font-bold uppercase text-[#FFC513] block flex items-center space-x-1">
+                    <CreditCard className="w-3.5 h-3.5" />
+                    <span>Pay with Credit Card</span>
+                  </span>
+                  <input
+                    type="text"
+                    placeholder="Cardholder Name"
+                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-2.5 py-1.5 text-xs text-white"
+                  />
+                  <input
+                    type="text"
+                    maxLength={19}
+                    placeholder="•••• •••• •••• ••••"
+                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-2.5 py-1.5 text-xs text-white"
+                  />
+                  <div className="grid grid-cols-2 gap-2">
+                    <input
+                      type="text"
+                      maxLength={5}
+                      placeholder="MM/YY"
+                      className="w-full bg-slate-900 border border-slate-700 rounded-xl px-2.5 py-1.5 text-xs text-white"
+                    />
+                    <input
+                      type="password"
+                      maxLength={4}
+                      placeholder="CVC"
+                      className="w-full bg-slate-900 border border-slate-700 rounded-xl px-2.5 py-1.5 text-xs text-white"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setBatchRoster((prev) =>
+                        prev.map((c) =>
+                          c.studentId === settlingPaymentChild.studentId
+                            ? { ...c, paymentStatus: 'Paid', paymentMethod: 'Credit Card', paymentDate: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) }
+                            : c
+                        )
+                      );
+                      setSettlingPaymentChild(null);
+                      triggerSavedToast(`Payment settled! ${settlingPaymentChild.firstName}'s tuition is marked as Paid.`);
+                    }}
+                    className="w-full py-2 bg-[#FFC513] hover:bg-amber-400 text-slate-950 font-black text-xs rounded-xl shadow-md transition-all"
+                  >
+                    Pay ${settlingPaymentChild.fee || 395} CAD via Card
+                  </button>
+                </div>
+
+                {/* Or Send Interac E-Transfer */}
+                <div className="p-3 bg-slate-950 rounded-2xl border border-[#339CA3]/40 space-y-2 text-xs">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold uppercase text-[#339CA3] block flex items-center space-x-1">
+                      <Landmark className="w-3.5 h-3.5" />
+                      <span>Or Settle via Interac e-Transfer</span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleCopyEmail('payments@cflicanada.ca')}
+                      className="text-[10px] text-[#FFC513] font-bold hover:underline"
+                    >
+                      {copiedEmailToast ? 'Copied!' : 'Copy Email'}
+                    </button>
+                  </div>
+                  <p className="text-[10px] text-slate-300">
+                    Send e-Transfer to <strong className="text-white">payments@cflicanada.ca</strong> with student name <strong>{settlingPaymentChild.firstName} {settlingPaymentChild.lastName}</strong> in message.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setBatchRoster((prev) =>
+                        prev.map((c) =>
+                          c.studentId === settlingPaymentChild.studentId
+                            ? { ...c, paymentStatus: 'Paid', paymentMethod: 'Interac E-Transfer', paymentDate: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) }
+                            : c
+                        )
+                      );
+                      setSettlingPaymentChild(null);
+                      triggerSavedToast(`E-Transfer marked as Paid for ${settlingPaymentChild.firstName}.`);
+                    }}
+                    className="w-full py-2 bg-[#339CA3] hover:bg-[#339CA3]/90 text-white font-bold text-xs rounded-xl transition-all"
+                  >
+                    Mark E-Transfer Completed
+                  </button>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setSettlingPaymentChild(null)}
+                className="w-full py-2 bg-slate-800 text-slate-300 font-bold text-xs rounded-xl hover:bg-slate-700"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ----------------------------------------------------------------- */}
+        {/* MODAL: NEW PARENT SIGN-UP & ENROLMENT GUIDED WIZARD               */}
+        {/* ----------------------------------------------------------------- */}
+        {isNewParentSignUp && (
+          <div className="absolute inset-0 bg-slate-950/95 backdrop-blur-md z-50 flex items-center justify-center p-3">
+            <div className="bg-slate-900 border border-slate-700 w-full max-w-sm rounded-3xl p-5 shadow-2xl space-y-3.5 animate-in fade-in max-h-[92vh] overflow-y-auto">
+              <div className="flex justify-between items-center pb-2 border-b border-slate-800">
+                <div className="flex items-center space-x-2">
+                  <div className="w-8 h-8 rounded-xl bg-[#E98E30]/20 text-[#E98E30] flex items-center justify-center font-bold">
+                    <User className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="font-extrabold text-white text-sm">New Parent Registration</h3>
+                    <span className="text-[10px] text-slate-400">Step {signUpStep} of 4</span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsNewParentSignUp(false)}
+                  className="p-1 text-slate-400 hover:text-white"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Step Indicators */}
+              <div className="flex space-x-1 pb-1">
+                {[1, 2, 3, 4].map((stepNum) => (
+                  <div
+                    key={stepNum}
+                    className={`h-1 flex-1 rounded-full transition-all ${
+                      signUpStep >= stepNum ? 'bg-[#FFC513]' : 'bg-slate-800'
+                    }`}
+                  />
+                ))}
+              </div>
+
+              {/* STEP 1: PARENT IDENTITY & REQUIRED EMERGENCY CONTACT */}
+              {signUpStep === 1 && (
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    if (!newParentData.parentEmail || !newParentData.parentPhone || !newParentData.emergencyContactName || !newParentData.emergencyContactPhone) {
+                      triggerSavedToast('Please fill all required guardian fields.');
+                      return;
+                    }
+                    setSignUpStep(2);
+                  }}
+                  className="space-y-3"
+                >
+                  <span className="text-[10px] font-black uppercase tracking-wider text-[#FFC513] block">
+                    1. Guardian Contact Information
+                  </span>
+
                   <div className="grid grid-cols-2 gap-2">
                     <div>
                       <label className="text-[9px] font-bold uppercase text-slate-400 block mb-1">First Name *</label>
                       <input
                         type="text"
                         required
-                        placeholder="Child's first name"
-                        value={newRegistrationData.firstName}
-                        onChange={(e) => setNewRegistrationData({ ...newRegistrationData, firstName: e.target.value })}
+                        placeholder="Guardian first name"
+                        value={newParentData.parentFirstName}
+                        onChange={(e) => setNewParentData({ ...newParentData, parentFirstName: e.target.value })}
                         className="w-full bg-slate-950 border border-slate-700 rounded-xl px-2.5 py-1.5 text-xs text-white"
                       />
                     </div>
@@ -4427,9 +5293,137 @@ export default function App() {
                       <input
                         type="text"
                         required
-                        placeholder="Child's last name"
-                        value={newRegistrationData.lastName}
-                        onChange={(e) => setNewRegistrationData({ ...newRegistrationData, lastName: e.target.value })}
+                        placeholder="Guardian last name"
+                        value={newParentData.parentLastName}
+                        onChange={(e) => setNewParentData({ ...newParentData, parentLastName: e.target.value })}
+                        className="w-full bg-slate-950 border border-slate-700 rounded-xl px-2.5 py-1.5 text-xs text-white"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-[9px] font-bold uppercase text-[#FFC513] block mb-1">Mobile Phone *</label>
+                      <input
+                        type="tel"
+                        required
+                        placeholder="(647) 555-0100"
+                        value={newParentData.parentPhone}
+                        onChange={(e) => setNewParentData({ ...newParentData, parentPhone: e.target.value })}
+                        className="w-full bg-slate-950 border border-slate-700 rounded-xl px-2.5 py-1.5 text-xs text-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[9px] font-bold uppercase text-[#FFC513] block mb-1">Email Address *</label>
+                      <input
+                        type="email"
+                        required
+                        placeholder="parent@example.com"
+                        value={newParentData.parentEmail}
+                        onChange={(e) => setNewParentData({ ...newParentData, parentEmail: e.target.value })}
+                        className="w-full bg-slate-950 border border-slate-700 rounded-xl px-2.5 py-1.5 text-xs text-white"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-[9px] font-bold uppercase text-slate-400 block mb-1">City</label>
+                      <input
+                        type="text"
+                        required
+                        value={newParentData.parentCity}
+                        onChange={(e) => setNewParentData({ ...newParentData, parentCity: e.target.value })}
+                        className="w-full bg-slate-950 border border-slate-700 rounded-xl px-2.5 py-1.5 text-xs text-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[9px] font-bold uppercase text-slate-400 block mb-1">Postal Code</label>
+                      <input
+                        type="text"
+                        required
+                        value={newParentData.parentPostalCode}
+                        onChange={(e) => setNewParentData({ ...newParentData, parentPostalCode: e.target.value.toUpperCase() })}
+                        className="w-full bg-slate-950 border border-slate-700 rounded-xl px-2.5 py-1.5 text-xs text-white uppercase"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="p-3 bg-slate-950 rounded-2xl border border-slate-800 space-y-2">
+                    <span className="text-[10px] font-black uppercase text-[#FFC513] block">
+                      Emergency Contact (Mandatory) *
+                    </span>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="text-[9px] font-bold uppercase text-slate-400 block mb-0.5">Contact Name *</label>
+                        <input
+                          type="text"
+                          required
+                          placeholder="e.g. Rachel Chen"
+                          value={newParentData.emergencyContactName}
+                          onChange={(e) => setNewParentData({ ...newParentData, emergencyContactName: e.target.value })}
+                          className="w-full bg-slate-900 border border-slate-700 rounded-xl px-2.5 py-1.5 text-xs text-white"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[9px] font-bold uppercase text-slate-400 block mb-0.5">Contact Phone *</label>
+                        <input
+                          type="tel"
+                          required
+                          placeholder="(647) 555-0199"
+                          value={newParentData.emergencyContactPhone}
+                          onChange={(e) => setNewParentData({ ...newParentData, emergencyContactPhone: e.target.value })}
+                          className="w-full bg-slate-900 border border-slate-700 rounded-xl px-2.5 py-1.5 text-xs text-white"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <button
+                    type="submit"
+                    className="w-full py-2.5 bg-[#E98E30] hover:bg-amber-500 text-slate-950 font-black text-xs rounded-xl flex items-center justify-center space-x-1 transition-all shadow-md"
+                  >
+                    <span>Next: Add Child Profile</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </button>
+                </form>
+              )}
+
+              {/* STEP 2: CHILD PROFILE */}
+              {signUpStep === 2 && (
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    if (!newParentData.childDob) {
+                      triggerSavedToast('Child date of birth is mandatory.');
+                      return;
+                    }
+                    setSignUpStep(3);
+                  }}
+                  className="space-y-3"
+                >
+                  <span className="text-[10px] font-black uppercase tracking-wider text-[#339CA3] block">
+                    2. Child Profile
+                  </span>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-[9px] font-bold uppercase text-slate-400 block mb-1">Child First Name *</label>
+                      <input
+                        type="text"
+                        required
+                        value={newParentData.childFirstName}
+                        onChange={(e) => setNewParentData({ ...newParentData, childFirstName: e.target.value })}
+                        className="w-full bg-slate-950 border border-slate-700 rounded-xl px-2.5 py-1.5 text-xs text-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[9px] font-bold uppercase text-slate-400 block mb-1">Child Last Name *</label>
+                      <input
+                        type="text"
+                        required
+                        value={newParentData.childLastName}
+                        onChange={(e) => setNewParentData({ ...newParentData, childLastName: e.target.value })}
                         className="w-full bg-slate-950 border border-slate-700 rounded-xl px-2.5 py-1.5 text-xs text-white"
                       />
                     </div>
@@ -4442,8 +5436,8 @@ export default function App() {
                     <input
                       type="date"
                       required
-                      value={newRegistrationData.dob}
-                      onChange={(e) => setNewRegistrationData({ ...newRegistrationData, dob: e.target.value })}
+                      value={newParentData.childDob}
+                      onChange={(e) => setNewParentData({ ...newParentData, childDob: e.target.value })}
                       className="w-full bg-slate-950 border border-slate-700 rounded-xl px-2.5 py-1.5 text-xs text-white"
                     />
                   </div>
@@ -4452,8 +5446,8 @@ export default function App() {
                     <div>
                       <label className="text-[9px] font-bold uppercase text-slate-400 block mb-1">Grade Level</label>
                       <select
-                        value={newRegistrationData.grade}
-                        onChange={(e) => setNewRegistrationData({ ...newRegistrationData, grade: parseInt(e.target.value) })}
+                        value={newParentData.childGrade}
+                        onChange={(e) => setNewParentData({ ...newParentData, childGrade: parseInt(e.target.value) })}
                         className="w-full bg-slate-950 border border-slate-700 rounded-xl px-2.5 py-1.5 text-xs font-bold text-white"
                       >
                         {[7, 8, 9, 10, 11, 12].map((g) => (
@@ -4465,19 +5459,19 @@ export default function App() {
                       <label className="text-[9px] font-bold uppercase text-slate-400 block mb-1">Postal Code</label>
                       <input
                         type="text"
-                        value={newRegistrationData.postalCode}
-                        onChange={(e) => setNewRegistrationData({ ...newRegistrationData, postalCode: e.target.value.toUpperCase() })}
+                        value={newParentData.childPostalCode}
+                        onChange={(e) => setNewParentData({ ...newParentData, childPostalCode: e.target.value.toUpperCase() })}
                         className="w-full bg-slate-950 border border-slate-700 rounded-xl px-2.5 py-1.5 text-xs text-white uppercase"
                       />
                     </div>
                   </div>
 
                   <div>
-                    <label className="text-[9px] font-bold uppercase text-slate-400 block mb-1">City of Residence</label>
+                    <label className="text-[9px] font-bold uppercase text-slate-400 block mb-1">City</label>
                     <input
                       type="text"
-                      value={newRegistrationData.city}
-                      onChange={(e) => setNewRegistrationData({ ...newRegistrationData, city: e.target.value })}
+                      value={newParentData.childCity}
+                      onChange={(e) => setNewParentData({ ...newParentData, childCity: e.target.value })}
                       className="w-full bg-slate-950 border border-slate-700 rounded-xl px-2.5 py-1.5 text-xs text-white"
                     />
                   </div>
@@ -4487,78 +5481,418 @@ export default function App() {
                     <input
                       type="text"
                       placeholder="e.g. Peanuts, Asthma, None"
-                      value={newRegistrationData.allergies}
-                      onChange={(e) => setNewRegistrationData({ ...newRegistrationData, allergies: e.target.value })}
+                      value={newParentData.childAllergies}
+                      onChange={(e) => setNewParentData({ ...newParentData, childAllergies: e.target.value })}
                       className="w-full bg-slate-950 border border-slate-700 rounded-xl px-2.5 py-1.5 text-xs text-white"
                     />
                   </div>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  <label className="text-[9px] font-bold uppercase text-slate-400 block mb-1">Select Registered Child</label>
-                  <select
-                    value={newRegistrationData.existingStudentId}
-                    onChange={(e) => setNewRegistrationData({ ...newRegistrationData, existingStudentId: e.target.value })}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-2.5 py-1.5 text-xs font-bold text-white"
-                  >
-                    {myChildren.map((c) => (
-                      <option key={c.studentId} value={c.studentId}>
-                        {c.firstName} {c.lastName} (Grade {c.grade})
-                      </option>
-                    ))}
-                  </select>
-                </div>
+
+                  <div className="flex space-x-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => setSignUpStep(1)}
+                      className="py-2 px-3 bg-slate-800 text-slate-300 font-bold text-xs rounded-xl"
+                    >
+                      Back
+                    </button>
+                    <button
+                      type="submit"
+                      className="flex-1 py-2 bg-[#339CA3] hover:bg-[#339CA3]/90 text-white font-extrabold text-xs rounded-xl flex items-center justify-center space-x-1"
+                    >
+                      <span>Next: Program & Cohort</span>
+                      <ArrowRight className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </form>
               )}
 
-              {/* Program & Batch Selection */}
-              <div className="space-y-2 pt-2 border-t border-slate-800">
-                <span className="text-[10px] font-bold uppercase text-[#339CA3] block">2. Select Program & Cohort</span>
-
-                <div>
-                  <label className="text-[9px] font-bold uppercase text-slate-400 block mb-1">Target Term</label>
-                  <select
-                    value={newRegistrationData.term}
-                    onChange={(e) => setNewRegistrationData({ ...newRegistrationData, term: e.target.value })}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-2.5 py-1.5 text-xs font-bold text-white"
-                  >
-                    <option value="Spring 2026">Spring 2026 (Starts Apr 11)</option>
-                    <option value="Winter 2026">Winter 2026 (Current)</option>
-                    <option value="Fall 2026">Fall 2026 (Starts Sep 19)</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="text-[9px] font-bold uppercase text-slate-400 block mb-1">Select Cohort / Location</label>
-                  <select
-                    value={newRegistrationData.batchCode}
-                    onChange={(e) => setNewRegistrationData({ ...newRegistrationData, batchCode: e.target.value })}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-2.5 py-1.5 text-xs font-bold text-white"
-                  >
-                    <option value="YLP - 1A Spring 2026: 1 Markham">YLP - 1A Spring 2026: 1 Markham (Saturdays 10:00 AM)</option>
-                    <option value="YLP - 1A Spring 2026: 2 Markham">YLP - 1A Spring 2026: 2 Markham (Saturdays 1:00 PM)</option>
-                    <option value="YLP - 2A Spring 2026: 3 Markham">YLP - 2A Spring 2026: 3 Markham (Saturdays 1:00 PM)</option>
-                    <option value="YLP - 1A Spring 2026: 4 Markham">YLP - 1A Spring 2026: 4 Markham (Saturdays 3:30 PM)</option>
-                    <option value="YLP - 1A Spring 2026: 5 Markham">YLP - 1A Spring 2026: 5 Markham (Saturdays 3:30 PM)</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="flex space-x-2 pt-2 border-t border-slate-800">
-                <button
-                  type="button"
-                  onClick={() => setIsRegisteringProgram(false)}
-                  className="flex-1 py-2 bg-slate-800 text-slate-300 font-bold text-xs rounded-xl hover:bg-slate-700"
+              {/* STEP 3: PROGRAM & COHORT SELECTION */}
+              {signUpStep === 3 && (
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    setSignUpStep(4);
+                  }}
+                  className="space-y-3"
                 >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="flex-1 py-2 bg-[#E98E30] text-slate-950 font-black text-xs rounded-xl hover:opacity-95 shadow-md"
+                  <span className="text-[10px] font-black uppercase tracking-wider text-[#FFC513] block">
+                    3. Select Program & Cohort
+                  </span>
+
+                  <div>
+                    <label className="text-[9px] font-bold uppercase text-slate-400 block mb-1">Select Program</label>
+                    <select
+                      value={newParentData.program}
+                      onChange={(e) => setNewParentData({ ...newParentData, program: e.target.value })}
+                      className="w-full bg-slate-950 border border-slate-700 rounded-xl px-2.5 py-1.5 text-xs font-bold text-white"
+                    >
+                      {masterProgramsList.map((p) => (
+                        <option key={p.id} value={p.name}>
+                          {p.name} — ${p.fee || 395} CAD
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="text-[9px] font-bold uppercase text-slate-400 block mb-1">Select Cohort & Location</label>
+                    <select
+                      value={newParentData.batchCode}
+                      onChange={(e) => setNewParentData({ ...newParentData, batchCode: e.target.value })}
+                      className="w-full bg-slate-950 border border-slate-700 rounded-xl px-2.5 py-1.5 text-xs font-bold text-white"
+                    >
+                      <option value="YLP - 1A Spring 2026: 1 Markham">YLP - 1A Spring 2026: 1 Markham (Saturdays 10:00 AM)</option>
+                      <option value="YLP - 1A Spring 2026: 2 Markham">YLP - 1A Spring 2026: 2 Markham (Saturdays 1:00 PM)</option>
+                      <option value="YLP - 2A Spring 2026: 3 Markham">YLP - 2A Spring 2026: 3 Markham (Saturdays 1:00 PM)</option>
+                      <option value="YLP - 1A Spring 2026: 4 Markham">YLP - 1A Spring 2026: 4 Markham (Saturdays 3:30 PM)</option>
+                      <option value="YLP - 1A Spring 2026: 5 Markham">YLP - 1A Spring 2026: 5 Markham (Saturdays 3:30 PM)</option>
+                    </select>
+                  </div>
+
+                  <div className="p-3 bg-slate-950 rounded-2xl border border-slate-800 text-xs space-y-1">
+                    <div className="flex justify-between text-slate-300">
+                      <span>Term:</span>
+                      <strong className="text-white">Spring 2026 (Starts Apr 11)</strong>
+                    </div>
+                    <div className="flex justify-between text-slate-300">
+                      <span>Tuition Fee:</span>
+                      <strong className="text-[#FFC513]">${getProgramFee(newParentData.program)}.00 CAD</strong>
+                    </div>
+                  </div>
+
+                  <div className="flex space-x-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => setSignUpStep(2)}
+                      className="py-2 px-3 bg-slate-800 text-slate-300 font-bold text-xs rounded-xl"
+                    >
+                      Back
+                    </button>
+                    <button
+                      type="submit"
+                      className="flex-1 py-2 bg-[#E98E30] hover:bg-amber-500 text-slate-950 font-black text-xs rounded-xl flex items-center justify-center space-x-1"
+                    >
+                      <span>Next: Payment Options (${getProgramFee(newParentData.program)} CAD)</span>
+                      <ArrowRight className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </form>
+              )}
+
+              {/* STEP 4: PAYMENT OPTIONS (CREDIT CARD | E-TRANSFER | PAY LATER) */}
+              {signUpStep === 4 && (
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    setIsProcessingPayment(true);
+                    setTimeout(() => {
+                      setIsProcessingPayment(false);
+
+                      // Update parent profile with newly registered parent details
+                      setParentProfile({
+                        firstName: newParentData.parentFirstName,
+                        lastName: newParentData.parentLastName,
+                        email: newParentData.parentEmail,
+                        phone: newParentData.parentPhone,
+                        city: newParentData.parentCity,
+                        postalCode: newParentData.parentPostalCode,
+                        emergencyContactName: newParentData.emergencyContactName,
+                        emergencyContactPhone: newParentData.emergencyContactPhone,
+                      });
+
+                      const fee = getProgramFee(newParentData.program);
+                      let finalStatus = 'Paid';
+                      let finalMethod = 'Credit Card';
+                      if (newParentData.paymentMethod === 'etransfer') {
+                        finalStatus = 'Pending E-Transfer';
+                        finalMethod = 'Interac E-Transfer';
+                      } else if (newParentData.paymentMethod === 'pay_later') {
+                        finalStatus = 'Pay Later';
+                        finalMethod = 'Pay Later';
+                      }
+
+                      // Add new child to roster with payment method & status
+                      const newChildId = `s-${Date.now()}`;
+                      const newChild = {
+                        studentId: newChildId,
+                        firstName: newParentData.childFirstName,
+                        lastName: newParentData.childLastName,
+                        grade: parseInt(newParentData.childGrade),
+                        dob: newParentData.childDob,
+                        allergies: newParentData.childAllergies || 'None',
+                        city: newParentData.childCity || 'Markham',
+                        postalCode: newParentData.childPostalCode || 'L3R 5M9',
+                        program: newParentData.program,
+                        term: newParentData.term || 'Spring 2026',
+                        batchCode: newParentData.batchCode,
+                        fee: fee,
+                        paymentStatus: finalStatus,
+                        paymentMethod: finalMethod,
+                        paymentDate: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+                        primaryGuardianName: `${newParentData.parentFirstName} ${newParentData.parentLastName} (Parent)`,
+                        primaryGuardianPhone: newParentData.parentPhone,
+                        emergencyContactName: newParentData.emergencyContactName,
+                        emergencyContactPhone: newParentData.emergencyContactPhone,
+                      };
+
+                      setBatchRoster((prev) => [newChild, ...prev]);
+                      setParentActiveChildId(newChildId);
+                      setIsNewParentSignUp(false);
+                      setActiveRolePerspective('parent');
+                      setParentActiveTab('dashboard');
+
+                      if (finalStatus === 'Paid') {
+                        triggerSavedToast(`Welcome to CFLI! Payment received & ${newChild.firstName} enrolled.`);
+                      } else if (finalStatus === 'Pending E-Transfer') {
+                        triggerSavedToast(`Welcome! E-Transfer instructions saved. Send to payments@cflicanada.ca.`);
+                      } else {
+                        triggerSavedToast(`Welcome! Registration saved as Pay Later. Invoice will be emailed.`);
+                      }
+                    }, 1200);
+                  }}
+                  className="space-y-3"
                 >
-                  Confirm Enrolment
-                </button>
-              </div>
-            </form>
+                  <span className="text-[10px] font-black uppercase tracking-wider text-[#FFC513] block">
+                    4. Select Payment Option
+                  </span>
+
+                  {/* Summary */}
+                  <div className="p-3 bg-slate-950 rounded-2xl border border-slate-800 space-y-1 text-xs">
+                    <div className="flex justify-between text-slate-300">
+                      <span>Guardian:</span>
+                      <strong className="text-white">{newParentData.parentFirstName} {newParentData.parentLastName}</strong>
+                    </div>
+                    <div className="flex justify-between text-slate-300">
+                      <span>Student:</span>
+                      <span className="text-[#339CA3]">{newParentData.childFirstName} {newParentData.childLastName}</span>
+                    </div>
+                    <div className="flex justify-between text-slate-300">
+                      <span>Program:</span>
+                      <span className="text-slate-300">{newParentData.program}</span>
+                    </div>
+                    <div className="pt-1.5 border-t border-slate-800 flex justify-between items-center">
+                      <span className="font-bold text-white">Amount Due:</span>
+                      <span className="text-base font-black text-[#FFC513]">
+                        ${getProgramFee(newParentData.program)}.00 CAD
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* 3 Payment Options Selector */}
+                  <div className="grid grid-cols-3 gap-1.5 p-1 bg-slate-950 border border-slate-800 rounded-xl">
+                    <button
+                      type="button"
+                      onClick={() => setNewParentData({ ...newParentData, paymentMethod: 'credit_card' })}
+                      className={`py-2 px-1 text-[11px] font-bold rounded-lg transition-all flex flex-col items-center justify-center space-y-1 ${
+                        newParentData.paymentMethod === 'credit_card'
+                          ? 'bg-[#FFC513] text-slate-950 shadow-sm'
+                          : 'text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      <CreditCard className="w-4 h-4" />
+                      <span>Credit Card</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setNewParentData({ ...newParentData, paymentMethod: 'etransfer' })}
+                      className={`py-2 px-1 text-[11px] font-bold rounded-lg transition-all flex flex-col items-center justify-center space-y-1 ${
+                        newParentData.paymentMethod === 'etransfer'
+                          ? 'bg-[#339CA3] text-white shadow-sm'
+                          : 'text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      <Landmark className="w-4 h-4" />
+                      <span>E-Transfer</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setNewParentData({ ...newParentData, paymentMethod: 'pay_later' })}
+                      className={`py-2 px-1 text-[11px] font-bold rounded-lg transition-all flex flex-col items-center justify-center space-y-1 ${
+                        newParentData.paymentMethod === 'pay_later'
+                          ? 'bg-[#5859A7] text-white shadow-sm'
+                          : 'text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      <Clock className="w-4 h-4" />
+                      <span>Pay Later</span>
+                    </button>
+                  </div>
+
+                  {/* OPTION 1: CREDIT CARD */}
+                  {newParentData.paymentMethod === 'credit_card' && (
+                    <div className="space-y-2 p-3 bg-slate-950 rounded-2xl border border-slate-800 animate-in fade-in">
+                      <span className="text-[10px] font-bold uppercase text-[#FFC513] block flex items-center space-x-1">
+                        <CreditCard className="w-3.5 h-3.5" />
+                        <span>Credit Card Payment Gateway</span>
+                      </span>
+
+                      <div>
+                        <label className="text-[9px] font-bold uppercase text-slate-400 block mb-1">Cardholder Name *</label>
+                        <input
+                          type="text"
+                          required={newParentData.paymentMethod === 'credit_card'}
+                          placeholder="Name on credit card"
+                          value={newParentData.cardholderName}
+                          onChange={(e) => setNewParentData({ ...newParentData, cardholderName: e.target.value })}
+                          className="w-full bg-slate-900 border border-slate-700 rounded-xl px-2.5 py-1.5 text-xs text-white"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="text-[9px] font-bold uppercase text-slate-400 block mb-1">Credit Card Number *</label>
+                        <input
+                          type="text"
+                          required={newParentData.paymentMethod === 'credit_card'}
+                          maxLength={19}
+                          placeholder="•••• •••• •••• ••••"
+                          value={newParentData.cardNumber}
+                          onChange={(e) => setNewParentData({ ...newParentData, cardNumber: e.target.value })}
+                          className="w-full bg-slate-900 border border-slate-700 rounded-xl px-2.5 py-1.5 text-xs text-white"
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="text-[9px] font-bold uppercase text-slate-400 block mb-1">Expiry (MM/YY) *</label>
+                          <input
+                            type="text"
+                            required={newParentData.paymentMethod === 'credit_card'}
+                            maxLength={5}
+                            placeholder="MM/YY"
+                            value={newParentData.cardExpiry}
+                            onChange={(e) => setNewParentData({ ...newParentData, cardExpiry: e.target.value })}
+                            className="w-full bg-slate-900 border border-slate-700 rounded-xl px-2.5 py-1.5 text-xs text-white"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[9px] font-bold uppercase text-slate-400 block mb-1">CVC *</label>
+                          <input
+                            type="password"
+                            required={newParentData.paymentMethod === 'credit_card'}
+                            maxLength={4}
+                            placeholder="•••"
+                            value={newParentData.cardCvc}
+                            onChange={(e) => setNewParentData({ ...newParentData, cardCvc: e.target.value })}
+                            className="w-full bg-slate-900 border border-slate-700 rounded-xl px-2.5 py-1.5 text-xs text-white"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="p-2 bg-emerald-500/10 rounded-xl border border-emerald-500/30 text-[10px] text-emerald-300 flex items-center space-x-1.5">
+                        <Lock className="w-3.5 h-3.5 shrink-0" />
+                        <span>256-bit SSL Encrypted • Powered by CFLI Payment Hub</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* OPTION 2: E-TRANSFER */}
+                  {newParentData.paymentMethod === 'etransfer' && (
+                    <div className="space-y-2.5 p-3 bg-slate-950 rounded-2xl border border-[#339CA3]/40 animate-in fade-in text-xs">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-black uppercase text-[#339CA3] tracking-wider flex items-center space-x-1">
+                          <Landmark className="w-3.5 h-3.5" />
+                          <span>Interac e-Transfer Instructions</span>
+                        </span>
+                        <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                          Auto-Deposit ON
+                        </span>
+                      </div>
+
+                      {/* Recipient Email & Copy */}
+                      <div className="p-2.5 bg-slate-900 rounded-xl border border-slate-800 space-y-1">
+                        <span className="text-[9px] uppercase font-bold text-slate-400 block">Send e-Transfer To:</span>
+                        <div className="flex items-center justify-between">
+                          <code className="text-[#FFC513] font-mono text-xs font-bold selection:bg-[#5859A7]">
+                            payments@cflicanada.ca
+                          </code>
+                          <button
+                            type="button"
+                            onClick={() => handleCopyEmail('payments@cflicanada.ca')}
+                            className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 text-[10px] font-bold rounded-lg flex items-center space-x-1 border border-slate-700"
+                          >
+                            <Copy className="w-3 h-3 text-[#339CA3]" />
+                            <span>{copiedEmailToast ? 'Copied!' : 'Copy'}</span>
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="p-2 bg-slate-900/60 rounded-xl border border-slate-800/80 text-[10px] text-slate-300 space-y-1">
+                        <p><strong>Transfer Message Note:</strong> Please include student name (<strong>{newParentData.childFirstName} {newParentData.childLastName}</strong>) and program in the note.</p>
+                        <p className="text-slate-400 text-[9px]">No security question required (CFLI has Interac Auto-Deposit enabled).</p>
+                      </div>
+
+                      {/* Top 7 Major Canadian Banks Direct Links */}
+                      <div className="space-y-1.5 pt-1">
+                        <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400 block">
+                          Log In to Your Bank (Top 7 Canadian Banks):
+                        </span>
+                        <div className="grid grid-cols-2 gap-1.5">
+                          {CANADIAN_MAJOR_BANKS.map((bank) => (
+                            <a
+                              key={bank.name}
+                              href={bank.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="p-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-slate-700 rounded-xl flex items-center justify-between text-[10px] font-bold text-white transition-all group"
+                            >
+                              <div className="flex items-center space-x-1.5 truncate">
+                                <span className={`w-2 h-2 rounded-full ${bank.badge}`} />
+                                <span className="truncate">{bank.name}</span>
+                              </div>
+                              <ExternalLink className="w-3 h-3 text-slate-500 group-hover:text-[#FFC513] shrink-0" />
+                            </a>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* OPTION 3: PAY LATER */}
+                  {newParentData.paymentMethod === 'pay_later' && (
+                    <div className="p-3 bg-slate-950 rounded-2xl border border-[#5859A7]/40 space-y-2 animate-in fade-in text-xs">
+                      <div className="flex items-center space-x-1.5 text-[#FFC513] font-bold">
+                        <Clock className="w-4 h-4" />
+                        <span>Pay Later (Deferred Invoicing)</span>
+                      </div>
+                      <p className="text-[11px] text-slate-300 leading-relaxed">
+                        Your spot for <strong>{newParentData.childFirstName} {newParentData.childLastName}</strong> in <strong>{newParentData.program}</strong> will be reserved immediately with status <span className="text-amber-400 font-bold">Pay Later</span>.
+                      </p>
+                      <div className="p-2 bg-slate-900 rounded-xl border border-slate-800 text-[10px] text-slate-400">
+                        An itemized electronic invoice of <strong>${getProgramFee(newParentData.program)}.00 CAD</strong> will be emailed to <strong>{newParentData.parentEmail}</strong>. Payment can be settled anytime before Session 1 via the Parent Portal.
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="flex space-x-2 pt-1">
+                    <button
+                      type="button"
+                      disabled={isProcessingPayment}
+                      onClick={() => setSignUpStep(3)}
+                      className="py-2 px-3 bg-slate-800 text-slate-300 font-bold text-xs rounded-xl"
+                    >
+                      Back
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={isProcessingPayment}
+                      className="flex-1 py-2 bg-gradient-to-r from-[#FFC513] to-[#E98E30] text-slate-950 font-black text-xs rounded-xl flex items-center justify-center space-x-1 shadow-md hover:opacity-95"
+                    >
+                      {isProcessingPayment ? (
+                        <span>Processing...</span>
+                      ) : newParentData.paymentMethod === 'credit_card' ? (
+                        <span>Pay ${getProgramFee(newParentData.program)} CAD & Finish</span>
+                      ) : newParentData.paymentMethod === 'etransfer' ? (
+                        <span>Confirm E-Transfer Initiated</span>
+                      ) : (
+                        <span>Complete Registration (Pay Later)</span>
+                      )}
+                    </button>
+                  </div>
+                </form>
+              )}
+            </div>
           </div>
         )}
       </main>
