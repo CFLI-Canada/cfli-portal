@@ -1114,33 +1114,30 @@ export default function App() {
   return (
     <div className="min-h-screen bg-[#f8fafc] text-slate-800 flex flex-col items-center justify-start p-2 sm:p-6 font-sans antialiased selection:bg-[#5859A7] selection:text-white">
       {/* CFLI Official 4-Color Brand Ribbon */}
-      <div className="w-full max-w-5xl h-1.5 rounded-full overflow-hidden flex mb-3 shadow-xs">
+      <div className={`w-full transition-all duration-300 ${deviceFrame ? 'max-w-md' : 'max-w-4xl'} h-1.5 rounded-full overflow-hidden flex mb-2.5 shadow-xs`}>
         <div className="w-1/4 h-full bg-[#5859A7]" title="Royal Indigo #5859A7" />
         <div className="w-1/4 h-full bg-[#339CA3]" title="Teal #339CA3" />
         <div className="w-1/4 h-full bg-[#E98E30]" title="Warm Tangerine #E98E30" />
         <div className="w-1/4 h-full bg-[#FFC513]" title="Golden Yellow #FFC513" />
       </div>
 
-      {/* Top Header Bar */}
-      <header className="w-full max-w-5xl mb-3 flex flex-wrap items-center justify-between gap-3 px-2">
-        <div className="flex items-center space-x-3">
-          <div className="bg-white rounded-2xl px-2.5 py-1.5 shadow-sm border border-slate-200 flex items-center justify-center">
-            <CfliLogo variant="full" className="h-7 sm:h-8 w-auto" />
-          </div>
-          <div>
-            <div className="flex items-center space-x-2">
-              <span className="font-extrabold tracking-tight text-slate-900 text-base">
-                CFLI <span className="text-[#339CA3]">Canada</span>
-              </span>
-              <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-[#339CA3]/15 text-[#339CA3] border border-[#339CA3]/30">
-                Winter 2026 Active
-              </span>
-            </div>
-            <p className="text-xs text-slate-500">Youth Leadership & Public Speaking Portal • Markham 1–5</p>
-          </div>
-        </div>
+      {/* Top Header Bar: Cleaned to only Gateway, Log-In, and Screen Expansion */}
+      <header className={`w-full transition-all duration-300 ${deviceFrame ? 'max-w-md' : 'max-w-4xl'} mb-2.5 flex items-center justify-between px-1`}>
+        {/* Gateway Button */}
+        <button
+          onClick={() => setActiveRolePerspective('gateway')}
+          className={`py-1.5 px-3 rounded-xl transition-all font-bold text-xs flex items-center space-x-1.5 border shadow-xs ${
+            activeRolePerspective === 'gateway'
+              ? 'bg-[#5859A7] text-white border-[#5859A7]'
+              : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50 hover:text-slate-900'
+          }`}
+          title="Return to Gateway"
+        >
+          <Home className="w-3.5 h-3.5" />
+          <span>Gateway</span>
+        </button>
 
-        {/* Viewport & Auth Controls */}
+        {/* Right Controls: Auth & Screen Expansion */}
         <div className="flex items-center space-x-2 text-xs">
           {currentUser.isLoggedIn ? (
             <div className="flex items-center space-x-2 bg-white border border-slate-200 py-1 px-2.5 rounded-xl shadow-xs">
@@ -1163,62 +1160,19 @@ export default function App() {
                 setLoginStep(1);
                 setLoginErrorMessage('');
               }}
-              className="py-1.5 px-3 bg-[#5859A7] hover:bg-[#4a4b91] text-white font-bold rounded-xl flex items-center space-x-1.5 shadow-sm transition-all"
+              className="py-1.5 px-3.5 bg-[#5859A7] hover:bg-[#4a4b91] text-white font-bold rounded-xl flex items-center space-x-1.5 shadow-xs transition-all text-xs"
+              title="Log In"
             >
               <LogIn className="w-3.5 h-3.5" />
               <span>Log In</span>
             </button>
           )}
 
-          {/* Perspective Switcher */}
-          <div className="bg-white border border-slate-200 p-1 rounded-xl flex items-center space-x-1 shadow-xs overflow-x-auto">
-            <button
-              onClick={() => setActiveRolePerspective('gateway')}
-              className={`px-2 py-1 rounded-lg transition-all font-bold text-xs flex items-center space-x-1 ${
-                activeRolePerspective === 'gateway' ? 'bg-[#5859A7] text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              <Home className="w-3 h-3" />
-              <span className="hidden sm:inline">Gateway</span>
-            </button>
-            <button
-              onClick={() => setActiveRolePerspective('facilitator')}
-              className={`px-2 py-1 rounded-lg transition-all font-bold text-xs ${
-                activeRolePerspective === 'facilitator' ? 'bg-[#5859A7] text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              Facilitator
-            </button>
-            <button
-              onClick={() => setActiveRolePerspective('parent')}
-              className={`px-2 py-1 rounded-lg transition-all font-bold text-xs ${
-                activeRolePerspective === 'parent' ? 'bg-[#E98E30] text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              Parent
-            </button>
-            <button
-              onClick={() => setActiveRolePerspective('student')}
-              className={`px-2 py-1 rounded-lg transition-all font-bold text-xs ${
-                activeRolePerspective === 'student' ? 'bg-[#339CA3] text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              Student
-            </button>
-            <button
-              onClick={() => setActiveRolePerspective('admin')}
-              className={`px-2 py-1 rounded-lg transition-all font-bold text-xs ${
-                activeRolePerspective === 'admin' ? 'bg-[#FFC513] text-slate-900 font-black shadow-xs' : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              Admin
-            </button>
-          </div>
-
+          {/* Screen expansion toggle button */}
           <button
             onClick={() => setDeviceFrame(!deviceFrame)}
-            className="p-1.5 bg-white border border-slate-200 rounded-xl text-slate-600 hover:bg-slate-50 transition-colors shadow-xs"
-            title="Toggle Phone Frame"
+            className="p-1.5 bg-white border border-slate-200 rounded-xl text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors shadow-xs"
+            title={deviceFrame ? "Expand to Full Screen View" : "Switch to Mobile Phone View"}
           >
             <Smartphone className="w-4 h-4" />
           </button>
@@ -1264,13 +1218,13 @@ export default function App() {
                 <CfliLogoCard className="max-w-[280px] shadow-sm" size="large" />
               </div>
               <span className="text-[10px] font-black uppercase tracking-widest text-[#339CA3] block mt-1">
-                Youth Leadership & Public Speaking Portal
+                Youth Leadership Programs
               </span>
               <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
                 CFLI Canada <span className="text-[#5859A7]">Hub</span>
               </h1>
               <p className="text-xs text-slate-600 max-w-xs mx-auto">
-                Welcome to the student and parent portal. Choose your portal or log in below to access your session records.
+                Welcome to the Yportal. Choose your portal or log in below to access your session records.
               </p>
             </div>
 
@@ -1323,7 +1277,7 @@ export default function App() {
                     <div>
                       <h2 className="text-sm font-black text-slate-900">Students</h2>
                       <p className="text-[11px] text-slate-500 mt-0.5">
-                        My upcoming speech roles, coach feedback history & attendance record.
+                        Review your leadership journey, roles, facilitator feedback & attendance record.
                       </p>
                     </div>
                   </div>
@@ -1393,7 +1347,7 @@ export default function App() {
             </div>
 
             <div className="pt-2 text-center border-t border-slate-200 text-[10px] text-slate-500">
-              CFLI Canada • Markham Hubs 1–5 • Safe & Cleared Facilitator Roster
+              CFLI Canada
             </div>
           </div>
         )}
