@@ -274,6 +274,45 @@ export default function App() {
   const [isNewParentSignUp, setIsNewParentSignUp] = useState(false);
   const [signUpStep, setSignUpStep] = useState(1);
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
+  const [newParentForm, setNewParentForm] = useState({
+    firstName: '',
+    lastName: '',
+    email: '',
+    phone: '',
+    city: 'Markham',
+    postalCode: 'L3R 5M9',
+    emergencyContactName: '',
+    emergencyContactPhone: '',
+    childFirstName: '',
+    childLastName: '',
+    childDob: '',
+    childGrade: 8,
+    childAllergies: 'None',
+    programId: 'p1',
+    batchId: 'b2',
+    paymentMethod: 'credit_card', // 'credit_card' | 'etransfer' | 'pay_later'
+    cardName: '',
+    cardNumber: '',
+    cardExpiry: '',
+    cardCvc: '',
+  });
+
+  // Sibling Enrolment State for Existing Parents
+  const [siblingForm, setSiblingForm] = useState({
+    childFirstName: '',
+    childLastName: '',
+    childDob: '',
+    childGrade: 8,
+    childAllergies: 'None',
+    programId: 'p1',
+    batchId: 'b2',
+    paymentMethod: 'credit_card',
+    cardName: '',
+    cardNumber: '',
+    cardExpiry: '',
+    cardCvc: '',
+  });
+  const [siblingStep, setSiblingStep] = useState(1);
 
   // Facilitator Navigation & Cohort States
   const [facilitatorActiveTab, setFacilitatorActiveTab] = useState('dashboard');
@@ -870,6 +909,159 @@ export default function App() {
 
     setShowPromotionConfirmationModal(false);
     triggerSavedToast(`Successfully promoted ${selectedStudentIdsForPromo.length} students to ${promoTargetTerm}!`);
+  };
+
+  // =============================================================================
+  // NEW PARENT SIGN-UP & ENROLMENT COMPLETION HANDLER
+  // =============================================================================
+  const handleCompleteNewParentSignUp = (e) => {
+    e.preventDefault();
+    setIsProcessingPayment(true);
+
+    const selectedProgram = masterProgramsList.find(p => p.id === newParentForm.programId) || masterProgramsList[0];
+    const selectedCohort = batches.find(b => b.id === newParentForm.batchId) || batches[1];
+    const newStudentId = `s-${Date.now()}`;
+
+    setTimeout(() => {
+      // 1. Update Guardian Profile
+      setParentProfile({
+        firstName: newParentForm.firstName,
+        lastName: newParentForm.lastName,
+        email: newParentForm.email,
+        phone: newParentForm.phone,
+        city: newParentForm.city || 'Markham',
+        postalCode: newParentForm.postalCode || 'L3R 5M9',
+        emergencyContactName: newParentForm.emergencyContactName,
+        emergencyContactPhone: newParentForm.emergencyContactPhone,
+      });
+
+      // 2. Add New Child to Cohort Roster
+      const paymentStatusValue =
+        newParentForm.paymentMethod === 'credit_card'
+          ? 'Paid'
+          : newParentForm.paymentMethod === 'etransfer'
+          ? 'Pending E-Transfer'
+          : 'Pay Later';
+
+      const paymentMethodValue =
+        newParentForm.paymentMethod === 'credit_card'
+          ? 'Credit Card'
+          : newParentForm.paymentMethod === 'etransfer'
+          ? 'Interac E-Transfer'
+          : 'Pay Later';
+
+      const newStudent = {
+        studentId: newStudentId,
+        firstName: newParentForm.childFirstName,
+        lastName: newParentForm.childLastName,
+        grade: parseInt(newParentForm.childGrade) || 8,
+        dob: newParentForm.childDob,
+        allergies: newParentForm.childAllergies || 'None',
+        city: newParentForm.city || 'Markham',
+        postalCode: newParentForm.postalCode || 'L3R 5M9',
+        program: selectedProgram.name,
+        term: 'Winter 2026',
+        batchCode: selectedCohort.code,
+        fee: selectedProgram.fee,
+        paymentStatus: paymentStatusValue,
+        paymentMethod: paymentMethodValue,
+        paymentDate: new Date().toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }),
+        primaryGuardianName: `${newParentForm.firstName} ${newParentForm.lastName} (Guardian)`,
+        primaryGuardianPhone: newParentForm.phone,
+        emergencyContactName: newParentForm.emergencyContactName,
+        emergencyContactPhone: newParentForm.emergencyContactPhone,
+        level: 1,
+        is_alumni: false,
+      };
+
+      setBatchRoster((prev) => [newStudent, ...prev]);
+
+      // 3. Assign default Session 5 leadership role & topic so learning journey immediately renders
+      setStudentSessionAssignments((prev) => ({
+        ...prev,
+        [`5_${newStudentId}`]: {
+          role: 'Time Manager',
+          category: 'Show & Tell',
+          topic: 'Orientation Show & Tell: My Passions',
+        },
+      }));
+
+      // 4. Set user session & switch directly into Parent Family Hub
+      setCurrentUser({
+        isLoggedIn: true,
+        role: 'parent',
+        name: `${newParentForm.firstName} ${newParentForm.lastName}`,
+        email: newParentForm.email,
+        phone: newParentForm.phone,
+      });
+      setParentActiveChildId(newStudentId);
+      setActiveRolePerspective('parent');
+      setParentActiveTab('dashboard');
+      setIsProcessingPayment(false);
+      setIsNewParentSignUp(false);
+
+      triggerSavedToast(`Welcome ${newParentForm.firstName}! Enrolment confirmed for ${newParentForm.childFirstName}.`);
+    }, 600);
+  };
+
+  // Sibling Enrolment Completion Handler
+  const handleCompleteSiblingEnrolment = (e) => {
+    e.preventDefault();
+    const selectedProgram = masterProgramsList.find(p => p.id === siblingForm.programId) || masterProgramsList[0];
+    const selectedCohort = batches.find(b => b.id === siblingForm.batchId) || batches[1];
+    const newSiblingId = `s-${Date.now()}`;
+
+    const paymentStatusValue =
+      siblingForm.paymentMethod === 'credit_card'
+        ? 'Paid'
+        : siblingForm.paymentMethod === 'etransfer'
+        ? 'Pending E-Transfer'
+        : 'Pay Later';
+
+    const paymentMethodValue =
+      siblingForm.paymentMethod === 'credit_card'
+        ? 'Credit Card'
+        : siblingForm.paymentMethod === 'etransfer'
+        ? 'Interac E-Transfer'
+        : 'Pay Later';
+
+    const newSibling = {
+      studentId: newSiblingId,
+      firstName: siblingForm.childFirstName,
+      lastName: siblingForm.childLastName,
+      grade: parseInt(siblingForm.childGrade) || 8,
+      dob: siblingForm.childDob,
+      allergies: siblingForm.childAllergies || 'None',
+      city: parentProfile.city || 'Markham',
+      postalCode: parentProfile.postalCode || 'L3R 5M9',
+      program: selectedProgram.name,
+      term: 'Winter 2026',
+      batchCode: selectedCohort.code,
+      fee: selectedProgram.fee,
+      paymentStatus: paymentStatusValue,
+      paymentMethod: paymentMethodValue,
+      paymentDate: new Date().toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }),
+      primaryGuardianName: `${parentProfile.firstName} ${parentProfile.lastName} (Guardian)`,
+      primaryGuardianPhone: parentProfile.phone,
+      emergencyContactName: parentProfile.emergencyContactName,
+      emergencyContactPhone: parentProfile.emergencyContactPhone,
+      level: 1,
+      is_alumni: false,
+    };
+
+    setBatchRoster((prev) => [...prev, newSibling]);
+    setStudentSessionAssignments((prev) => ({
+      ...prev,
+      [`5_${newSiblingId}`]: {
+        role: 'Linguistic Manager',
+        category: 'Prepared Speech',
+        topic: 'Getting Started in Public Speaking',
+      },
+    }));
+
+    setParentActiveChildId(newSiblingId);
+    setIsRegisteringProgram(false);
+    triggerSavedToast(`Enrolled sibling ${siblingForm.childFirstName} into ${selectedProgram.name}!`);
   };
 
   const myChildren = batchRoster.filter(
@@ -3651,57 +3843,904 @@ export default function App() {
 
               {loginMode === 'staff' && (
                 <form onSubmit={handleStaffLogin} className="space-y-3">
+                  {/* ... existing staff login form ... */}
+                </form>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ================================================================= */}
+        {/* MODAL: NEW PARENT SIGN-UP & GUIDED ENROLMENT WIZARD (4 STEPS)    */}
+        {/* ================================================================= */}
+        {isNewParentSignUp && (
+          <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-3 sm:p-4">
+            <div className="bg-white border border-slate-200 w-full max-w-md rounded-3xl p-5 shadow-2xl space-y-4 animate-in fade-in max-h-[90vh] overflow-y-auto">
+              {/* Wizard Header & Progress Bar */}
+              <div className="flex justify-between items-center pb-2 border-b border-slate-100">
+                <div className="flex items-center space-x-2">
+                  <div className="w-8 h-8 rounded-xl bg-[#E98E30]/15 text-[#E98E30] flex items-center justify-center font-bold">
+                    <Users className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="font-extrabold text-slate-900 text-sm">New Parent Registration</h3>
+                    <span className="text-[10px] text-slate-500 font-semibold">Step {signUpStep} of 4</span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsNewParentSignUp(false)}
+                  className="p-1 rounded-lg text-slate-400 hover:text-slate-700"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Progress Indicator Dots */}
+              <div className="grid grid-cols-4 gap-1.5 pt-0.5">
+                {[
+                  { step: 1, label: 'Parent' },
+                  { step: 2, label: 'Child' },
+                  { step: 3, label: 'Program' },
+                  { step: 4, label: 'Payment' },
+                ].map((s) => (
+                  <div key={s.step} className="space-y-1">
+                    <div
+                      className={`h-1.5 rounded-full transition-all ${
+                        signUpStep >= s.step ? 'bg-[#E98E30]' : 'bg-slate-200'
+                      }`}
+                    />
+                    <span
+                      className={`text-[9px] block text-center font-bold uppercase ${
+                        signUpStep === s.step ? 'text-[#E98E30]' : 'text-slate-400'
+                      }`}
+                    >
+                      {s.label}
+                    </span>
+                  </div>
+                ))}
+              </div>
+
+              {/* STEP 1: GUARDIAN INFORMATION */}
+              {signUpStep === 1 && (
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    if (
+                      !newParentForm.firstName ||
+                      !newParentForm.lastName ||
+                      !newParentForm.email ||
+                      !newParentForm.phone ||
+                      !newParentForm.emergencyContactName ||
+                      !newParentForm.emergencyContactPhone
+                    ) {
+                      triggerSavedToast('Please complete all required guardian fields.');
+                      return;
+                    }
+                    setSignUpStep(2);
+                  }}
+                  className="space-y-3"
+                >
+                  <div className="p-2.5 bg-amber-50/70 rounded-xl border border-amber-200/80 text-xs text-amber-900">
+                    <span className="font-bold block">Primary Guardian Profile</span>
+                    <span className="text-[11px] text-amber-800">
+                      Emergency alerts, session schedules, and receipt records will be directed here.
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-[10px] font-bold uppercase text-slate-500 block mb-1">
+                        First Name *
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="e.g. David"
+                        value={newParentForm.firstName}
+                        onChange={(e) => setNewParentForm({ ...newParentForm, firstName: e.target.value })}
+                        className="w-full bg-slate-50 border border-slate-300 rounded-xl px-2.5 py-1.5 text-xs text-slate-900 font-bold focus:ring-2 focus:ring-[#E98E30]"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-bold uppercase text-slate-500 block mb-1">
+                        Last Name *
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="e.g. Chen"
+                        value={newParentForm.lastName}
+                        onChange={(e) => setNewParentForm({ ...newParentForm, lastName: e.target.value })}
+                        className="w-full bg-slate-50 border border-slate-300 rounded-xl px-2.5 py-1.5 text-xs text-slate-900 font-bold focus:ring-2 focus:ring-[#E98E30]"
+                      />
+                    </div>
+                  </div>
+
                   <div>
                     <label className="text-[10px] font-bold uppercase text-slate-500 block mb-1">
-                      Staff Role
+                      Guardian Email Address *
+                    </label>
+                    <input
+                      type="email"
+                      required
+                      placeholder="e.g. david.chen@test.com"
+                      value={newParentForm.email}
+                      onChange={(e) => setNewParentForm({ ...newParentForm, email: e.target.value })}
+                      className="w-full bg-slate-50 border border-slate-300 rounded-xl px-2.5 py-1.5 text-xs text-slate-900 focus:ring-2 focus:ring-[#E98E30]"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-[10px] font-bold uppercase text-slate-500 block mb-1">
+                      Canadian Mobile Phone *
+                    </label>
+                    <input
+                      type="tel"
+                      required
+                      placeholder="(647) 555-0192"
+                      value={newParentForm.phone}
+                      onChange={(e) => setNewParentForm({ ...newParentForm, phone: e.target.value })}
+                      className="w-full bg-slate-50 border border-slate-300 rounded-xl px-2.5 py-1.5 text-xs text-slate-900 focus:ring-2 focus:ring-[#E98E30]"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-[10px] font-bold uppercase text-slate-500 block mb-1">City</label>
+                      <input
+                        type="text"
+                        placeholder="Markham"
+                        value={newParentForm.city}
+                        onChange={(e) => setNewParentForm({ ...newParentForm, city: e.target.value })}
+                        className="w-full bg-slate-50 border border-slate-300 rounded-xl px-2.5 py-1.5 text-xs text-slate-900"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-bold uppercase text-slate-500 block mb-1">Postal Code</label>
+                      <input
+                        type="text"
+                        placeholder="L3R 5M9"
+                        value={newParentForm.postalCode}
+                        onChange={(e) => setNewParentForm({ ...newParentForm, postalCode: e.target.value })}
+                        className="w-full bg-slate-50 border border-slate-300 rounded-xl px-2.5 py-1.5 text-xs text-slate-900 uppercase"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200/80 space-y-2">
+                    <span className="text-[10px] font-bold uppercase text-[#5859A7] block">
+                      Emergency Secondary Contact *
+                    </span>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <input
+                          type="text"
+                          required
+                          placeholder="Contact Name *"
+                          value={newParentForm.emergencyContactName}
+                          onChange={(e) => setNewParentForm({ ...newParentForm, emergencyContactName: e.target.value })}
+                          className="w-full bg-white border border-slate-300 rounded-xl px-2 py-1.5 text-xs text-slate-900"
+                        />
+                      </div>
+                      <div>
+                        <input
+                          type="tel"
+                          required
+                          placeholder="Contact Phone *"
+                          value={newParentForm.emergencyContactPhone}
+                          onChange={(e) => setNewParentForm({ ...newParentForm, emergencyContactPhone: e.target.value })}
+                          className="w-full bg-white border border-slate-300 rounded-xl px-2 py-1.5 text-xs text-slate-900"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <button
+                    type="submit"
+                    className="w-full py-2.5 bg-[#E98E30] hover:bg-amber-600 text-white font-black text-xs rounded-xl shadow-xs transition-all flex items-center justify-center space-x-1.5"
+                  >
+                    <span>Continue to Step 2: Child Profile</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </button>
+                </form>
+              )}
+
+              {/* STEP 2: CHILD PROFILE */}
+              {signUpStep === 2 && (
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    if (!newParentForm.childFirstName || !newParentForm.childLastName || !newParentForm.childDob) {
+                      triggerSavedToast('Child First Name, Last Name and DOB are mandatory.');
+                      return;
+                    }
+                    setSignUpStep(3);
+                  }}
+                  className="space-y-3"
+                >
+                  <div className="p-2.5 bg-teal-50/70 rounded-xl border border-teal-200/80 text-xs text-teal-900">
+                    <span className="font-bold block">Youth Student Profile</span>
+                    <span className="text-[11px] text-teal-800">
+                      Date of birth is required for cohort placement and tournament age verification.
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-[10px] font-bold uppercase text-slate-500 block mb-1">
+                        Child First Name *
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="e.g. Maya"
+                        value={newParentForm.childFirstName}
+                        onChange={(e) => setNewParentForm({ ...newParentForm, childFirstName: e.target.value })}
+                        className="w-full bg-slate-50 border border-slate-300 rounded-xl px-2.5 py-1.5 text-xs text-slate-900 font-bold focus:ring-2 focus:ring-[#339CA3]"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-bold uppercase text-slate-500 block mb-1">
+                        Child Last Name *
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="e.g. Chen"
+                        value={newParentForm.childLastName}
+                        onChange={(e) => setNewParentForm({ ...newParentForm, childLastName: e.target.value })}
+                        className="w-full bg-slate-50 border border-slate-300 rounded-xl px-2.5 py-1.5 text-xs text-slate-900 font-bold focus:ring-2 focus:ring-[#339CA3]"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-[10px] font-bold uppercase text-slate-500 block mb-1">
+                        Date of Birth *
+                      </label>
+                      <input
+                        type="date"
+                        required
+                        value={newParentForm.childDob}
+                        onChange={(e) => setNewParentForm({ ...newParentForm, childDob: e.target.value })}
+                        className="w-full bg-slate-50 border border-slate-300 rounded-xl px-2.5 py-1.5 text-xs text-slate-900 font-bold focus:ring-2 focus:ring-[#339CA3]"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-bold uppercase text-slate-500 block mb-1">
+                        School Grade (1–12) *
+                      </label>
+                      <select
+                        value={newParentForm.childGrade}
+                        onChange={(e) => setNewParentForm({ ...newParentForm, childGrade: parseInt(e.target.value) || 8 })}
+                        className="w-full bg-slate-50 border border-slate-300 rounded-xl px-2.5 py-1.5 text-xs text-slate-900 font-bold"
+                      >
+                        {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((g) => (
+                          <option key={g} value={g}>Grade {g}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-[10px] font-bold uppercase text-slate-500 block mb-1">
+                      Medical / Dietary / Allergy Alerts
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Peanuts (carry EpiPen), Asthma, or None"
+                      value={newParentForm.childAllergies}
+                      onChange={(e) => setNewParentForm({ ...newParentForm, childAllergies: e.target.value })}
+                      className="w-full bg-slate-50 border border-slate-300 rounded-xl px-2.5 py-1.5 text-xs text-slate-900"
+                    />
+                  </div>
+
+                  <div className="flex space-x-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => setSignUpStep(1)}
+                      className="py-2.5 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl"
+                    >
+                      Back
+                    </button>
+                    <button
+                      type="submit"
+                      className="flex-1 py-2.5 bg-[#339CA3] hover:bg-teal-700 text-white font-black text-xs rounded-xl shadow-xs transition-all flex items-center justify-center space-x-1.5"
+                    >
+                      <span>Continue to Step 3: Select Program</span>
+                      <ArrowRight className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </form>
+              )}
+
+              {/* STEP 3: PROGRAM & COHORT SELECTION */}
+              {signUpStep === 3 && (
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    setSignUpStep(4);
+                  }}
+                  className="space-y-3"
+                >
+                  <div>
+                    <label className="text-[10px] font-bold uppercase text-slate-500 block mb-1">
+                      Select Master Program
                     </label>
                     <select
-                      value={loginUserType}
-                      onChange={(e) => setLoginUserType(e.target.value)}
+                      value={newParentForm.programId}
+                      onChange={(e) => setNewParentForm({ ...newParentForm, programId: e.target.value })}
                       className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-900"
                     >
-                      <option value="facilitator">Facilitator / Coach</option>
-                      <option value="admin">Administrator</option>
+                      {masterProgramsList.map((prog) => (
+                        <option key={prog.id} value={prog.id}>
+                          {prog.name} (${prog.fee} CAD)
+                        </option>
+                      ))}
                     </select>
                   </div>
 
                   <div>
                     <label className="text-[10px] font-bold uppercase text-slate-500 block mb-1">
-                      CFLI Google / Gmail ID *
+                      Select Cohort & Schedule
                     </label>
-                    <input
-                      type="email"
-                      required
-                      placeholder="name@cflicanada.com"
-                      value={loginEmail}
-                      onChange={(e) => setLoginEmail(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#5859A7]"
-                    />
+                    <select
+                      value={newParentForm.batchId}
+                      onChange={(e) => setNewParentForm({ ...newParentForm, batchId: e.target.value })}
+                      className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-900"
+                    >
+                      {batches.map((b) => (
+                        <option key={b.id} value={b.id}>
+                          {b.code} ({b.dayTime})
+                        </option>
+                      ))}
+                    </select>
                   </div>
 
-                  <div>
-                    <label className="text-[10px] font-bold uppercase text-slate-500 block mb-1">
-                      Password *
-                    </label>
-                    <input
-                      type="password"
-                      required
-                      placeholder="••••••••"
-                      value={loginPassword}
-                      onChange={(e) => setLoginPassword(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#5859A7]"
-                    />
-                  </div>
+                  {/* Program Summary Card */}
+                  {(() => {
+                    const prog = masterProgramsList.find((p) => p.id === newParentForm.programId) || masterProgramsList[0];
+                    const batch = batches.find((b) => b.id === newParentForm.batchId) || batches[1];
+                    return (
+                      <div className="p-3 bg-indigo-50/60 rounded-2xl border border-indigo-100 space-y-2 text-xs">
+                        <div className="flex justify-between items-center">
+                          <span className="font-extrabold text-[#5859A7]">{prog.name}</span>
+                          <span className="text-sm font-black text-slate-900">${prog.fee} CAD</span>
+                        </div>
+                        <p className="text-[11px] text-slate-600">{prog.description}</p>
+                        <div className="pt-1.5 border-t border-indigo-200/60 flex items-center justify-between text-[11px] text-slate-500">
+                          <span>{batch.location}</span>
+                          <span className="font-bold text-[#339CA3]">{batch.dayTime}</span>
+                        </div>
+                      </div>
+                    );
+                  })()}
 
-                  <button
-                    type="submit"
-                    className="w-full py-2.5 bg-[#5859A7] hover:bg-[#494a8f] text-white font-black text-xs rounded-xl shadow-xs transition-all flex items-center justify-center space-x-1.5"
-                  >
-                    <Lock className="w-3.5 h-3.5" />
-                    <span>Authenticate Staff</span>
-                  </button>
+                  <div className="flex space-x-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => setSignUpStep(2)}
+                      className="py-2.5 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl"
+                    >
+                      Back
+                    </button>
+                    <button
+                      type="submit"
+                      className="flex-1 py-2.5 bg-[#5859A7] hover:bg-[#494a8f] text-white font-black text-xs rounded-xl shadow-xs transition-all flex items-center justify-center space-x-1.5"
+                    >
+                      <span>Proceed to Step 4: Pay Fee</span>
+                      <ArrowRight className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
                 </form>
               )}
+
+              {/* STEP 4: TUITION PAYMENT */}
+              {signUpStep === 4 && (
+                <form onSubmit={handleCompleteNewParentSignUp} className="space-y-3.5">
+                  {(() => {
+                    const prog = masterProgramsList.find((p) => p.id === newParentForm.programId) || masterProgramsList[0];
+                    return (
+                      <div className="p-3 bg-gradient-to-r from-amber-50 to-white rounded-2xl border border-amber-200 flex justify-between items-center">
+                        <div>
+                          <span className="text-[10px] font-bold uppercase text-amber-800 block">Enrolment Fee</span>
+                          <h4 className="text-xs font-black text-slate-900">{newParentForm.childFirstName} {newParentForm.childLastName}</h4>
+                          <span className="text-[10px] text-slate-500">{prog.name}</span>
+                        </div>
+                        <div className="text-right">
+                          <span className="text-lg font-black text-slate-900">${prog.fee}</span>
+                          <span className="text-[10px] text-slate-500 block">CAD (No HST)</span>
+                        </div>
+                      </div>
+                    );
+                  })()}
+
+                  {/* 3 Payment Options Selector */}
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold uppercase text-slate-500 block mb-1">
+                      Select Payment Method
+                    </label>
+                    <div className="grid grid-cols-3 gap-1.5 bg-slate-100 p-1 rounded-2xl text-xs font-bold">
+                      <button
+                        type="button"
+                        onClick={() => setNewParentForm({ ...newParentForm, paymentMethod: 'credit_card' })}
+                        className={`py-1.5 rounded-xl transition-all ${
+                          newParentForm.paymentMethod === 'credit_card'
+                            ? 'bg-white text-slate-900 shadow-xs'
+                            : 'text-slate-500 hover:text-slate-900'
+                        }`}
+                      >
+                        Credit Card
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setNewParentForm({ ...newParentForm, paymentMethod: 'etransfer' })}
+                        className={`py-1.5 rounded-xl transition-all ${
+                          newParentForm.paymentMethod === 'etransfer'
+                            ? 'bg-white text-slate-900 shadow-xs'
+                            : 'text-slate-500 hover:text-slate-900'
+                        }`}
+                      >
+                        E-Transfer
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setNewParentForm({ ...newParentForm, paymentMethod: 'pay_later' })}
+                        className={`py-1.5 rounded-xl transition-all ${
+                          newParentForm.paymentMethod === 'pay_later'
+                            ? 'bg-white text-slate-900 shadow-xs'
+                            : 'text-slate-500 hover:text-slate-900'
+                        }`}
+                      >
+                        Pay Later
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* 1. CREDIT CARD FORM */}
+                  {newParentForm.paymentMethod === 'credit_card' && (
+                    <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200 space-y-2">
+                      <div className="flex items-center space-x-1.5 text-xs font-bold text-slate-800">
+                        <CreditCard className="w-4 h-4 text-[#5859A7]" />
+                        <span>Secure Credit Card Checkout</span>
+                      </div>
+                      <input
+                        type="text"
+                        required
+                        placeholder="Cardholder Full Name"
+                        value={newParentForm.cardName}
+                        onChange={(e) => setNewParentForm({ ...newParentForm, cardName: e.target.value })}
+                        className="w-full bg-white border border-slate-300 rounded-xl px-2.5 py-1.5 text-xs text-slate-900"
+                      />
+                      <input
+                        type="text"
+                        required
+                        maxLength={19}
+                        placeholder="Card Number: 4500 •••• •••• 1234"
+                        value={newParentForm.cardNumber}
+                        onChange={(e) => setNewParentForm({ ...newParentForm, cardNumber: e.target.value })}
+                        className="w-full bg-white border border-slate-300 rounded-xl px-2.5 py-1.5 text-xs font-mono text-slate-900"
+                      />
+                      <div className="grid grid-cols-2 gap-2">
+                        <input
+                          type="text"
+                          required
+                          maxLength={5}
+                          placeholder="MM/YY"
+                          value={newParentForm.cardExpiry}
+                          onChange={(e) => setNewParentForm({ ...newParentForm, cardExpiry: e.target.value })}
+                          className="w-full bg-white border border-slate-300 rounded-xl px-2.5 py-1.5 text-xs text-center font-mono text-slate-900"
+                        />
+                        <input
+                          type="text"
+                          required
+                          maxLength={4}
+                          placeholder="CVC"
+                          value={newParentForm.cardCvc}
+                          onChange={(e) => setNewParentForm({ ...newParentForm, cardCvc: e.target.value })}
+                          className="w-full bg-white border border-slate-300 rounded-xl px-2.5 py-1.5 text-xs text-center font-mono text-slate-900"
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 2. INTERAC E-TRANSFER PANEL */}
+                  {newParentForm.paymentMethod === 'etransfer' && (
+                    <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200 space-y-2.5">
+                      <div className="flex justify-between items-center">
+                        <span className="text-[10px] font-bold uppercase text-slate-500">Send Interac E-Transfer to</span>
+                        {copiedEmailToast && (
+                          <span className="text-[10px] text-emerald-600 font-bold">Email Copied!</span>
+                        )}
+                      </div>
+
+                      <div className="flex items-center justify-between p-2 bg-white border border-slate-200 rounded-xl">
+                        <span className="font-mono font-bold text-xs text-slate-900">payments@cflicanada.ca</span>
+                        <button
+                          type="button"
+                          onClick={() => handleCopyEmail('payments@cflicanada.ca')}
+                          className="p-1 text-slate-500 hover:text-slate-900"
+                          title="Copy Email"
+                        >
+                          <Copy className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+
+                      <div className="p-2 bg-emerald-50 border border-emerald-200 rounded-xl text-[11px] text-emerald-900">
+                        <strong>Auto-Deposit Enabled:</strong> No security question required. Include your child's full name in the message.
+                      </div>
+
+                      <div>
+                        <span className="text-[10px] font-bold uppercase text-slate-500 block mb-1">
+                          Launch Canadian Online Banking
+                        </span>
+                        <div className="grid grid-cols-2 gap-1.5">
+                          {CANADIAN_MAJOR_BANKS.slice(0, 4).map((bank) => (
+                            <a
+                              key={bank.code}
+                              href={bank.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="p-1.5 bg-white border border-slate-200 rounded-xl text-[11px] font-bold text-slate-700 hover:border-[#339CA3] flex items-center justify-between"
+                            >
+                              <span>{bank.name.split(' ')[0]}</span>
+                              <ExternalLink className="w-2.5 h-2.5 text-slate-400" />
+                            </a>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 3. PAY LATER NOTICE */}
+                  {newParentForm.paymentMethod === 'pay_later' && (
+                    <div className="p-3 bg-amber-50 rounded-2xl border border-amber-200 text-xs text-amber-900 space-y-1">
+                      <span className="font-bold block">Reserve Spot & Pay Later</span>
+                      <p className="text-[11px] text-amber-800">
+                        Your child's place in the cohort is secured immediately. An invoice will be emailed to <strong>{newParentForm.email}</strong> to settle before Session 1.
+                      </p>
+                    </div>
+                  )}
+
+                  <div className="flex space-x-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => setSignUpStep(3)}
+                      className="py-2.5 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl"
+                    >
+                      Back
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={isProcessingPayment}
+                      className="flex-1 py-2.5 bg-[#FFC513] hover:bg-amber-400 text-slate-950 font-black text-xs rounded-xl shadow-xs transition-all flex items-center justify-center space-x-1.5 disabled:opacity-50"
+                    >
+                      <CheckCircle className="w-3.5 h-3.5" />
+                      <span>{isProcessingPayment ? 'Processing Enrolment...' : 'Confirm Registration & Complete'}</span>
+                    </button>
+                  </div>
+                </form>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ================================================================= */}
+        {/* MODAL: ADD SIBLING CHILD (FOR LOGGED-IN PARENTS)                  */}
+        {/* ================================================================= */}
+        {isRegisteringProgram && (
+          <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-3 sm:p-4">
+            <form
+              onSubmit={handleCompleteSiblingEnrolment}
+              className="bg-white border border-slate-200 w-full max-w-sm rounded-3xl p-5 shadow-2xl space-y-3 animate-in fade-in max-h-[85vh] overflow-y-auto"
+            >
+              <div className="flex justify-between items-center pb-2 border-b border-slate-100">
+                <div className="flex items-center space-x-2">
+                  <Plus className="w-4 h-4 text-[#E98E30]" />
+                  <h3 className="font-extrabold text-slate-900 text-sm">Enrol Sibling Child</h3>
+                </div>
+                <button type="button" onClick={() => setIsRegisteringProgram(false)} className="p-1 text-slate-400 hover:text-slate-700">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-[10px] font-bold uppercase text-slate-500 block mb-1">First Name *</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="Sibling Name"
+                    value={siblingForm.childFirstName}
+                    onChange={(e) => setSiblingForm({ ...siblingForm, childFirstName: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl px-2.5 py-1.5 text-xs text-slate-900 font-bold"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold uppercase text-slate-500 block mb-1">Last Name *</label>
+                  <input
+                    type="text"
+                    required
+                    value={siblingForm.childLastName || parentProfile.lastName}
+                    onChange={(e) => setSiblingForm({ ...siblingForm, childLastName: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl px-2.5 py-1.5 text-xs text-slate-900 font-bold"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-[10px] font-bold uppercase text-slate-500 block mb-1">DOB *</label>
+                  <input
+                    type="date"
+                    required
+                    value={siblingForm.childDob}
+                    onChange={(e) => setSiblingForm({ ...siblingForm, childDob: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl px-2.5 py-1.5 text-xs text-slate-900 font-bold"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold uppercase text-slate-500 block mb-1">Grade</label>
+                  <select
+                    value={siblingForm.childGrade}
+                    onChange={(e) => setSiblingForm({ ...siblingForm, childGrade: parseInt(e.target.value) || 8 })}
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl px-2.5 py-1.5 text-xs text-slate-900 font-bold"
+                  >
+                    {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((g) => (
+                      <option key={g} value={g}>Grade {g}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="text-[10px] font-bold uppercase text-slate-500 block mb-1">Select Program</label>
+                <select
+                  value={siblingForm.programId}
+                  onChange={(e) => setSiblingForm({ ...siblingForm, programId: e.target.value })}
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-2.5 py-1.5 text-xs text-slate-900 font-bold"
+                >
+                  {masterProgramsList.map((p) => (
+                    <option key={p.id} value={p.id}>{p.name} (${p.fee} CAD)</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="text-[10px] font-bold uppercase text-slate-500 block mb-1">Select Cohort</label>
+                <select
+                  value={siblingForm.batchId}
+                  onChange={(e) => setSiblingForm({ ...siblingForm, batchId: e.target.value })}
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-2.5 py-1.5 text-xs text-slate-900 font-bold"
+                >
+                  {batches.map((b) => (
+                    <option key={b.id} value={b.id}>{b.code}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="flex space-x-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsRegisteringProgram(false)}
+                  className="flex-1 py-2 bg-slate-100 text-slate-700 text-xs font-bold rounded-xl"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 py-2 bg-[#E98E30] hover:bg-amber-600 text-white font-extrabold text-xs rounded-xl shadow-xs"
+                >
+                  Enrol Sibling
+                </button>
+              </div>
+            </form>
+          </div>
+        )}
+
+        {/* ================================================================= */}
+        {/* MODAL: SETTLE UNPAID TUITION                                      */}
+        {/* ================================================================= */}
+        {settlingPaymentChild && (
+          <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+            <div className="bg-white border border-slate-200 w-full max-w-sm rounded-3xl p-5 shadow-2xl space-y-3.5 animate-in fade-in">
+              <div className="flex justify-between items-center pb-2 border-b border-slate-100">
+                <div className="flex items-center space-x-2">
+                  <CreditCard className="w-4 h-4 text-[#339CA3]" />
+                  <h3 className="font-extrabold text-slate-900 text-sm">Settle Tuition Payment</h3>
+                </div>
+                <button onClick={() => setSettlingPaymentChild(null)} className="p-1 text-slate-400 hover:text-slate-700">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs flex justify-between items-center">
+                <div>
+                  <span className="font-extrabold text-slate-900 block">{settlingPaymentChild.firstName} {settlingPaymentChild.lastName}</span>
+                  <span className="text-[10px] text-slate-500">{settlingPaymentChild.program}</span>
+                </div>
+                <span className="text-base font-black text-[#5859A7]">${settlingPaymentChild.fee} CAD</span>
+              </div>
+
+              <div className="space-y-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setBatchRoster(prev => prev.map(s => s.studentId === settlingPaymentChild.studentId ? { ...s, paymentStatus: 'Paid', paymentMethod: 'Credit Card', paymentDate: new Date().toLocaleDateString('en-US') } : s));
+                    triggerSavedToast(`Tuition settled via Credit Card!`);
+                    setSettlingPaymentChild(null);
+                  }}
+                  className="w-full py-2.5 bg-[#5859A7] hover:bg-[#494a8f] text-white font-bold text-xs rounded-xl shadow-xs flex items-center justify-center space-x-1.5"
+                >
+                  <CreditCard className="w-3.5 h-3.5" />
+                  <span>Pay Now by Credit Card</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setBatchRoster(prev => prev.map(s => s.studentId === settlingPaymentChild.studentId ? { ...s, paymentStatus: 'Paid', paymentMethod: 'Interac E-Transfer', paymentDate: new Date().toLocaleDateString('en-US') } : s));
+                    triggerSavedToast(`Marked E-Transfer verified!`);
+                    setSettlingPaymentChild(null);
+                  }}
+                  className="w-full py-2.5 bg-[#339CA3] hover:bg-teal-700 text-white font-bold text-xs rounded-xl shadow-xs flex items-center justify-center space-x-1.5"
+                >
+                  <CheckCircle className="w-3.5 h-3.5" />
+                  <span>Mark E-Transfer as Sent</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ================================================================= */}
+        {/* MODAL: EDIT PARENT PROFILE                                       */}
+        {/* ================================================================= */}
+        {isEditingParentProfile && (
+          <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                setIsEditingParentProfile(false);
+                triggerSavedToast('Guardian profile updated!');
+              }}
+              className="bg-white border border-slate-200 w-full max-w-sm rounded-3xl p-5 shadow-2xl space-y-3 animate-in fade-in max-h-[85vh] overflow-y-auto"
+            >
+              <div className="flex justify-between items-center pb-2 border-b border-slate-100">
+                <h3 className="font-extrabold text-slate-900 text-sm">Edit Guardian Details</h3>
+                <button type="button" onClick={() => setIsEditingParentProfile(false)} className="p-1 text-slate-400 hover:text-slate-700">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-[10px] font-bold uppercase text-slate-500 block mb-1">First Name</label>
+                  <input
+                    type="text"
+                    required
+                    value={parentProfile.firstName}
+                    onChange={(e) => setParentProfile({ ...parentProfile, firstName: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl px-2.5 py-1.5 text-xs text-slate-900 font-bold"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold uppercase text-slate-500 block mb-1">Last Name</label>
+                  <input
+                    type="text"
+                    required
+                    value={parentProfile.lastName}
+                    onChange={(e) => setParentProfile({ ...parentProfile, lastName: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl px-2.5 py-1.5 text-xs text-slate-900 font-bold"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-[10px] font-bold uppercase text-slate-500 block mb-1">Email</label>
+                <input
+                  type="email"
+                  required
+                  value={parentProfile.email}
+                  onChange={(e) => setParentProfile({ ...parentProfile, email: e.target.value })}
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-2.5 py-1.5 text-xs text-slate-900"
+                />
+              </div>
+
+              <div>
+                <label className="text-[10px] font-bold uppercase text-slate-500 block mb-1">Phone</label>
+                <input
+                  type="tel"
+                  required
+                  value={parentProfile.phone}
+                  onChange={(e) => setParentProfile({ ...parentProfile, phone: e.target.value })}
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-2.5 py-1.5 text-xs text-slate-900"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-[10px] font-bold uppercase text-slate-500 block mb-1">Emergency Contact</label>
+                  <input
+                    type="text"
+                    required
+                    value={parentProfile.emergencyContactName}
+                    onChange={(e) => setParentProfile({ ...parentProfile, emergencyContactName: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl px-2.5 py-1.5 text-xs text-slate-900"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold uppercase text-slate-500 block mb-1">Contact Phone</label>
+                  <input
+                    type="tel"
+                    required
+                    value={parentProfile.emergencyContactPhone}
+                    onChange={(e) => setParentProfile({ ...parentProfile, emergencyContactPhone: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl px-2.5 py-1.5 text-xs text-slate-900"
+                  />
+                </div>
+              </div>
+
+              <div className="flex space-x-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsEditingParentProfile(false)}
+                  className="flex-1 py-2 bg-slate-100 text-slate-700 text-xs font-bold rounded-xl"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 py-2 bg-[#E98E30] hover:bg-amber-600 text-white font-extrabold text-xs rounded-xl shadow-xs"
+                >
+                  Save Profile
+                </button>
+              </div>
+            </form>
+          </div>
+        )}
+
+        {/* ================================================================= */}
+        {/* MODAL: ADMIN PROMOTION CONFIRMATION                               */}
+        {/* ================================================================= */}
+        {showPromotionConfirmationModal && (
+          <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+            <div className="bg-white border border-slate-200 w-full max-w-sm rounded-3xl p-5 shadow-2xl space-y-3.5 animate-in fade-in">
+              <div className="flex justify-between items-center pb-2 border-b border-slate-100">
+                <div className="flex items-center space-x-2">
+                  <Sparkles className="w-4 h-4 text-[#FFC513]" />
+                  <h3 className="font-extrabold text-slate-900 text-sm">Confirm Batch Promotion</h3>
+                </div>
+                <button onClick={() => setShowPromotionConfirmationModal(false)} className="p-1 text-slate-400 hover:text-slate-700">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="p-3 bg-amber-50 rounded-2xl border border-amber-200 text-xs text-amber-900 space-y-1">
+                <span className="font-bold block">Promote {selectedStudentIdsForPromo.length} Students</span>
+                <p className="text-[11px] text-amber-800">
+                  Target: <strong>{promoTargetTerm}</strong> • Cohort: <strong>{promoTargetBatchCode}</strong> (Level {promoTargetLevel})
+                </p>
+              </div>
+
+              <div className="flex space-x-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setShowPromotionConfirmationModal(false)}
+                  className="flex-1 py-2 bg-slate-100 text-slate-700 text-xs font-bold rounded-xl"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleExecutePromotion}
+                  className="flex-1 py-2 bg-[#FFC513] hover:bg-amber-400 text-slate-950 font-black text-xs rounded-xl shadow-xs"
+                >
+                  Confirm & Advance
+                </button>
+              </div>
             </div>
           </div>
         )}
