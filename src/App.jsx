@@ -73,28 +73,45 @@ import {
 
 // =============================================================================
 // SAFE ENVIRONMENT RESOLUTION & INLINE SUPABASE CLIENT
-// Operates safely across browser sandbox previews, Node.js, and live Vercel builds
+// Supports Vite static build injection, Node/SSR, and browser localStorage
 // =============================================================================
-const getRuntimeEnv = (key, fallback = '') => {
+const getStoredKey = () => {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      return window.localStorage.getItem('cfli_supabase_anon_key') || '';
+    }
+  } catch (e) {}
+  return '';
+};
+
+// Direct references ensure Vite's compiler substitutes them during `npm run build`
+const getViteEnv = (key, fallback = '') => {
+  try {
+    if (typeof import.meta !== 'undefined' && import.meta.env) {
+      if (key === 'VITE_SUPABASE_URL' && import.meta.env.VITE_SUPABASE_URL) {
+        return import.meta.env.VITE_SUPABASE_URL;
+      }
+      if (key === 'VITE_SUPABASE_ANON_KEY' && import.meta.env.VITE_SUPABASE_ANON_KEY) {
+        return import.meta.env.VITE_SUPABASE_ANON_KEY;
+      }
+    }
+  } catch (e) {}
   try {
     if (typeof process !== 'undefined' && process.env && process.env[key]) {
       return process.env[key];
     }
   } catch (e) {}
-  try {
-    const metaCheck = new Function('try { return import.meta.env } catch(e) { return null }');
-    const envObj = metaCheck();
-    if (envObj && envObj[key]) {
-      return envObj[key];
-    }
-  } catch (e) {}
+  if (key === 'VITE_SUPABASE_ANON_KEY') {
+    const stored = getStoredKey();
+    if (stored) return stored;
+  }
   return fallback;
 };
 
-const SUPABASE_PROJECT_URL = getRuntimeEnv('VITE_SUPABASE_URL', 'https://ifitoxccgoeofrbtzutm.supabase.co');
-const SUPABASE_ANON_KEY = getRuntimeEnv('VITE_SUPABASE_ANON_KEY', '');
+const DEFAULT_SUPABASE_URL = 'https://ifitoxccgoeofrbtzutm.supabase.co';
 
 export const createInlineSupabaseClient = (url, key) => {
+  const activeUrl = url || DEFAULT_SUPABASE_URL;
   return {
     from: (table) => {
       let selectFields = '*';
@@ -102,8 +119,8 @@ export const createInlineSupabaseClient = (url, key) => {
         select: async (fields = '*') => {
           selectFields = fields;
           try {
-            if (!key) return { data: null, error: new Error('Missing API key') };
-            const res = await fetch(`${url}/rest/v1/${table}?select=${encodeURIComponent(selectFields)}`, {
+            if (!key) return { data: null, error: new Error('Missing Supabase anon key') };
+            const res = await fetch(`${activeUrl}/rest/v1/${table}?select=${encodeURIComponent(selectFields)}`, {
               headers: {
                 apikey: key,
                 Authorization: `Bearer ${key}`,
@@ -123,8 +140,8 @@ export const createInlineSupabaseClient = (url, key) => {
         insert: (payload) => {
           const runInsert = async () => {
             try {
-              if (!key) return { data: null, error: new Error('Missing API key') };
-              const res = await fetch(`${url}/rest/v1/${table}`, {
+              if (!key) return { data: null, error: new Error('Missing Supabase anon key') };
+              const res = await fetch(`${activeUrl}/rest/v1/${table}`, {
                 method: 'POST',
                 headers: {
                   apikey: key,
@@ -160,8 +177,8 @@ export const createInlineSupabaseClient = (url, key) => {
         },
         upsert: async (payload) => {
           try {
-            if (!key) return { data: null, error: new Error('Missing API key') };
-            const res = await fetch(`${url}/rest/v1/${table}`, {
+            if (!key) return { data: null, error: new Error('Missing Supabase anon key') };
+            const res = await fetch(`${activeUrl}/rest/v1/${table}`, {
               method: 'POST',
               headers: {
                 apikey: key,
@@ -186,7 +203,10 @@ export const createInlineSupabaseClient = (url, key) => {
   };
 };
 
-export const supabase = createInlineSupabaseClient(SUPABASE_PROJECT_URL, SUPABASE_ANON_KEY);
+export const supabase = createInlineSupabaseClient(
+  getViteEnv('VITE_SUPABASE_URL', DEFAULT_SUPABASE_URL),
+  getViteEnv('VITE_SUPABASE_ANON_KEY', '')
+);
 
 // =============================================================================
 // CFLI OFFICIAL BRAND LOGO (Centre for Leadership and Innovation)
@@ -334,6 +354,13 @@ const calculateVscStatus = (issueDateStr) => {
 export default function App() {
   const [deviceFrame, setDeviceFrame] = useState(true);
   const [supabaseConnected, setSupabaseConnected] = useState(false);
+
+  // Database Connection Modal & Key Setup States
+  const [showDbConnectModal, setShowDbConnectModal] = useState(false);
+  const [dbKeyInput, setDbKeyInput] = useState(() => getViteEnv('VITE_SUPABASE_ANON_KEY', ''));
+  const [dbUrlInput, setDbUrlInput] = useState(() => getViteEnv('VITE_SUPABASE_URL', DEFAULT_SUPABASE_URL));
+  const [dbConnectError, setDbConnectError] = useState('');
+  const [isTestingDb, setIsTestingDb] = useState(false);
 
   // AUTHENTICATION & LOGIN STATES
   const [currentUser, setCurrentUser] = useState({
@@ -844,105 +871,128 @@ export default function App() {
     10: 'https://docs.google.com/document/d/ylp-w26-session10-centre-stage-gala',
   });
 
-  // Supabase Initial Query Hook with safe error handling
-  useEffect(() => {
-    async function loadDataFromSupabase() {
-      try {
-        const { data: progData, error: progErr } = await supabase.from('master_programs').select('*');
-        if (!progErr && progData && progData.length > 0) {
-          setSupabaseConnected(true);
-          setMasterProgramsList(progData.map(p => ({
-            id: p.id,
-            code: p.code,
-            name: p.name,
-            description: p.description,
-            fee: p.fee || 395,
-            active: p.is_active ?? true,
-          })));
-        }
+  // Reusable function to verify Supabase connectivity and load live rows
+  const testAndLoadSupabase = async (overrideKey = null, overrideUrl = null) => {
+    const activeUrl = overrideUrl || dbUrlInput || DEFAULT_SUPABASE_URL;
+    const activeKey = overrideKey !== null ? overrideKey : (dbKeyInput || getViteEnv('VITE_SUPABASE_ANON_KEY', ''));
 
-        const { data: termData } = await supabase.from('master_terms').select('*');
-        if (termData && termData.length > 0) {
-          setMasterTermsList(termData.map(t => ({
-            id: t.id,
-            name: t.term_name,
-            season: t.season,
-            year: t.year,
-            isCurrent: t.is_current,
-            startDate: t.start_date,
-            endDate: t.end_date,
-          })));
-        }
-
-        const { data: locData } = await supabase.from('master_locations').select('*');
-        if (locData && locData.length > 0) {
-          setMasterLocationsList(locData.map(l => ({
-            id: l.id,
-            code: l.code,
-            name: l.name,
-            address: l.address,
-            city: l.city,
-          })));
-        }
-
-        const { data: bnData } = await supabase.from('master_batch_names').select('*');
-        if (bnData && bnData.length > 0) {
-          setMasterBatchNamesList(bnData.map(b => ({
-            id: b.id,
-            code: b.code,
-            name: b.name,
-            level: b.level,
-            description: b.description,
-          })));
-        }
-
-        const { data: parentsDb } = await supabase.from('parents').select('*');
-        if (parentsDb && parentsDb.length > 0) {
-          setParentsList(parentsDb.map(p => ({
-            id: p.id,
-            firstName: p.first_name,
-            lastName: p.last_name,
-            email: p.email,
-            phone: p.phone,
-            city: p.city || 'Markham',
-            postalCode: p.postal_code || 'L3R 5M9',
-            emergencyContactName: p.emergency_contact_name || '',
-            emergencyContactPhone: p.emergency_contact_phone || '',
-          })));
-        }
-
-        const { data: studentsDb } = await supabase.from('students').select('*');
-        if (studentsDb && studentsDb.length > 0) {
-          setBatchRoster(studentsDb.map(s => ({
-            studentId: s.id,
-            firstName: s.first_name,
-            lastName: s.last_name,
-            grade: s.grade_level || 8,
-            dob: s.date_of_birth || '2012-01-01',
-            allergies: s.medical_allergies || 'None',
-            city: s.city || 'Markham',
-            postalCode: s.postal_code || 'L3R 5M9',
-            program: 'Youth Leadership Program',
-            term: 'Winter 2026',
-            batchCode: 'YLP - 1A Winter 2026: 2 Markham',
-            fee: 395,
-            paymentStatus: 'Paid',
-            paymentMethod: 'Credit Card',
-            paymentDate: 'Jan 08, 2026',
-            primaryGuardianName: 'Guardian on file',
-            primaryGuardianPhone: s.phone || '(647) 555-0192',
-            emergencyContactName: 'Rachel Chen',
-            emergencyContactPhone: '(647) 555-0199',
-            level: 1,
-            is_alumni: s.is_alumni || false,
-          })));
-        }
-      } catch (err) {
-        console.warn('Supabase initialization using local fallbacks:', err.message);
-      }
+    if (!activeKey) {
+      setSupabaseConnected(false);
+      return false;
     }
 
-    loadDataFromSupabase();
+    try {
+      const client = createInlineSupabaseClient(activeUrl, activeKey);
+      const { data: progData, error: progErr } = await client.from('master_programs').select('*');
+
+      if (progErr) {
+        console.warn('Supabase query error:', progErr.message);
+        setSupabaseConnected(false);
+        return false;
+      }
+
+      // Valid response received from Supabase
+      setSupabaseConnected(true);
+
+      if (progData && progData.length > 0) {
+        setMasterProgramsList(progData.map(p => ({
+          id: p.id,
+          code: p.code,
+          name: p.name,
+          description: p.description,
+          fee: p.fee || 395,
+          active: p.is_active ?? true,
+        })));
+      }
+
+      const { data: termData } = await client.from('master_terms').select('*');
+      if (termData && termData.length > 0) {
+        setMasterTermsList(termData.map(t => ({
+          id: t.id,
+          name: t.term_name,
+          season: t.season,
+          year: t.year,
+          isCurrent: t.is_current,
+          startDate: t.start_date,
+          endDate: t.end_date,
+        })));
+      }
+
+      const { data: locData } = await client.from('master_locations').select('*');
+      if (locData && locData.length > 0) {
+        setMasterLocationsList(locData.map(l => ({
+          id: l.id,
+          code: l.code,
+          name: l.name,
+          address: l.address,
+          city: l.city,
+        })));
+      }
+
+      const { data: bnData } = await client.from('master_batch_names').select('*');
+      if (bnData && bnData.length > 0) {
+        setMasterBatchNamesList(bnData.map(b => ({
+          id: b.id,
+          code: b.code,
+          name: b.name,
+          level: b.level,
+          description: b.description,
+        })));
+      }
+
+      const { data: parentsDb } = await client.from('parents').select('*');
+      if (parentsDb && parentsDb.length > 0) {
+        setParentsList(parentsDb.map(p => ({
+          id: p.id,
+          firstName: p.first_name,
+          lastName: p.last_name,
+          email: p.email,
+          phone: p.phone,
+          city: p.city || 'Markham',
+          postalCode: p.postal_code || 'L3R 5M9',
+          emergencyContactName: p.emergency_contact_name || '',
+          emergencyContactPhone: p.emergency_contact_phone || '',
+        })));
+      }
+
+      const { data: studentsDb } = await client.from('students').select('*');
+      if (studentsDb && studentsDb.length > 0) {
+        setBatchRoster(studentsDb.map(s => ({
+          studentId: s.id,
+          firstName: s.first_name,
+          lastName: s.last_name,
+          grade: s.grade_level || 8,
+          dob: s.date_of_birth || '2012-01-01',
+          allergies: s.medical_allergies || 'None',
+          city: s.city || 'Markham',
+          postalCode: s.postal_code || 'L3R 5M9',
+          program: 'Youth Leadership Program',
+          term: 'Winter 2026',
+          batchCode: 'YLP - 1A Winter 2026: 2 Markham',
+          fee: 395,
+          paymentStatus: 'Paid',
+          paymentMethod: 'Credit Card',
+          paymentDate: 'Jan 08, 2026',
+          primaryGuardianName: 'Guardian on file',
+          primaryGuardianPhone: s.phone || '(647) 555-0192',
+          emergencyContactName: 'Rachel Chen',
+          emergencyContactPhone: '(647) 555-0199',
+          level: 1,
+          is_alumni: s.is_alumni || false,
+        })));
+      }
+
+      return true;
+    } catch (err) {
+      console.warn('Supabase initialization using local fallbacks:', err.message);
+      setSupabaseConnected(false);
+      return false;
+    }
+  };
+
+  // Run initial test on component mount
+  useEffect(() => {
+    testAndLoadSupabase();
   }, []);
 
   const triggerSavedToast = (msg = 'Changes saved successfully!') => {
@@ -1405,17 +1455,21 @@ export default function App() {
             <span>Gateway</span>
           </button>
 
-          <div
-            className={`flex items-center space-x-1 px-2 py-1 rounded-xl text-[10px] font-bold border ${
+          <button
+            onClick={() => {
+              setDbConnectError('');
+              setShowDbConnectModal(true);
+            }}
+            className={`flex items-center space-x-1 px-2.5 py-1 rounded-xl text-[10px] font-bold border transition-all cursor-pointer shadow-2xs hover:opacity-90 ${
               supabaseConnected
                 ? 'bg-emerald-50 text-emerald-700 border-emerald-300'
-                : 'bg-slate-100 text-slate-500 border-slate-200'
+                : 'bg-amber-50 text-amber-800 border-amber-300 animate-pulse'
             }`}
-            title={supabaseConnected ? 'Live Supabase connection verified' : 'Connecting to Supabase...'}
+            title="Click to view or connect Supabase database"
           >
             <Database className="w-3 h-3" />
-            <span>{supabaseConnected ? 'DB Live' : 'Offline / Mock'}</span>
-          </div>
+            <span>{supabaseConnected ? 'DB Live' : 'Offline / Mock (Connect)'}</span>
+          </button>
         </div>
 
         <div className="flex items-center space-x-2 text-xs">
@@ -3764,6 +3818,144 @@ export default function App() {
               <div className="flex space-x-2 pt-1">
                 <button type="button" onClick={() => setShowPromotionConfirmationModal(false)} className="flex-1 py-2 bg-slate-100 text-slate-700 text-xs font-bold rounded-xl">Cancel</button>
                 <button type="button" onClick={handleExecutePromotion} className="flex-1 py-2 bg-[#FFC513] text-slate-950 font-black text-xs rounded-xl shadow-xs">Confirm</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ================================================================= */}
+        {/* MODAL: SUPABASE DATABASE CONNECTION MANAGER                       */}
+        {/* ================================================================= */}
+        {showDbConnectModal && (
+          <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+            <div className="bg-white border border-slate-200 w-full max-w-md rounded-3xl p-5 shadow-2xl space-y-4 animate-in fade-in max-h-[90vh] overflow-y-auto">
+              <div className="flex justify-between items-center pb-2 border-b border-slate-100">
+                <div className="flex items-center space-x-2">
+                  <div className={`w-8 h-8 rounded-xl flex items-center justify-center ${supabaseConnected ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+                    <Database className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="font-extrabold text-slate-900 text-sm">Supabase Database Connection</h3>
+                    <span className="text-[10px] text-slate-500 font-semibold">
+                      {supabaseConnected ? '🟢 Live PostgreSQL Connected' : '🟠 Running in Offline / Mock Mode'}
+                    </span>
+                  </div>
+                </div>
+                <button onClick={() => setShowDbConnectModal(false)} className="p-1 text-slate-400 hover:text-slate-700">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {dbConnectError && (
+                <div className="p-2.5 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-700 flex items-start space-x-2">
+                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                  <span>{dbConnectError}</span>
+                </div>
+              )}
+
+              {supabaseConnected ? (
+                <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-2xl text-xs text-emerald-900 space-y-1">
+                  <span className="font-extrabold block">Database Connection Verified!</span>
+                  <p className="text-[11px] text-emerald-800">
+                    The portal is actively reading and saving records directly to your Supabase project (<code>ifitoxccgoeofrbtzutm</code>).
+                  </p>
+                </div>
+              ) : (
+                <div className="p-3 bg-amber-50 border border-amber-200 rounded-2xl text-xs text-amber-900 space-y-1">
+                  <span className="font-bold block">Why is it in Offline / Mock Mode?</span>
+                  <p className="text-[11px] text-amber-800 leading-relaxed">
+                    The app needs your Supabase <strong>anon public key</strong> to authenticate database queries. You can either paste it below to connect immediately on this browser, or trigger a <strong>Redeploy</strong> on Vercel so your environment variables take effect.
+                  </p>
+                </div>
+              )}
+
+              <form
+                onSubmit={async (e) => {
+                  e.preventDefault();
+                  setDbConnectError('');
+                  setIsTestingDb(true);
+
+                  const cleanedKey = dbKeyInput.trim();
+                  const cleanedUrl = dbUrlInput.trim() || DEFAULT_SUPABASE_URL;
+
+                  if (!cleanedKey) {
+                    setDbConnectError('Please enter your Supabase anon / public API key.');
+                    setIsTestingDb(false);
+                    return;
+                  }
+
+                  const success = await testAndLoadSupabase(cleanedKey, cleanedUrl);
+                  setIsTestingDb(false);
+
+                  if (success) {
+                    try {
+                      localStorage.setItem('cfli_supabase_anon_key', cleanedKey);
+                    } catch (err) {}
+                    triggerSavedToast('Connected to Supabase! Live database active.');
+                    setShowDbConnectModal(false);
+                  } else {
+                    setDbConnectError('Could not connect with this key. Check that you copied the green "anon / public" key from Supabase Settings -> API Keys.');
+                  }
+                }}
+                className="space-y-3"
+              >
+                <div>
+                  <label className="text-[10px] font-bold uppercase text-slate-500 block mb-1">
+                    Supabase Project URL
+                  </label>
+                  <input
+                    type="url"
+                    required
+                    value={dbUrlInput}
+                    onChange={(e) => setDbUrlInput(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900 font-mono"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[10px] font-bold uppercase text-slate-500 block mb-1">
+                    Supabase Anon / Public Key *
+                  </label>
+                  <textarea
+                    rows={3}
+                    required
+                    placeholder="Paste your long anon public key (starts with eyJhbGci...)"
+                    value={dbKeyInput}
+                    onChange={(e) => setDbKeyInput(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900 font-mono leading-tight focus:ring-2 focus:ring-[#5859A7]"
+                  />
+                  <span className="text-[10px] text-slate-400 block mt-1">
+                    Found in Supabase: Settings (⚙️) $\rightarrow$ API Keys $\rightarrow$ <strong>Project API keys: anon / public</strong>
+                  </span>
+                </div>
+
+                <div className="flex space-x-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => setShowDbConnectModal(false)}
+                    className="py-2.5 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl"
+                  >
+                    Close
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isTestingDb}
+                    className="flex-1 py-2.5 bg-[#5859A7] hover:bg-[#494a8f] text-white font-extrabold text-xs rounded-xl shadow-xs transition-all flex items-center justify-center space-x-1.5 disabled:opacity-50"
+                  >
+                    <CheckCircle className="w-3.5 h-3.5" />
+                    <span>{isTestingDb ? 'Verifying with Supabase...' : 'Connect & Sync Database'}</span>
+                  </button>
+                </div>
+              </form>
+
+              <div className="pt-2 border-t border-slate-100 text-[11px] text-slate-500 space-y-1">
+                <span className="font-bold text-slate-700 block">How to make this automatic on Vercel:</span>
+                <p className="text-[10px] leading-relaxed">
+                  1. In Vercel, go to <strong>Project Settings $\rightarrow$ Environment Variables</strong> and confirm <code>VITE_SUPABASE_URL</code> and <code>VITE_SUPABASE_ANON_KEY</code> are saved.
+                </p>
+                <p className="text-[10px] leading-relaxed">
+                  2. Go to <strong>Deployments</strong> $\rightarrow$ click the three dots (<code>...</code>) on the latest deployment $\rightarrow$ click <strong>Redeploy</strong>. Vite will bake the keys into the site automatically.
+                </p>
               </div>
             </div>
           </div>
